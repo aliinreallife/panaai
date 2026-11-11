@@ -36,9 +36,10 @@ const future = (days: number) => new Date(Date.now() + days * 86400000);
 
 let keyPromise: Promise<Buffer> | null = null;
 export async function privateKey() {
-  if (process.env.RECEIPT_ENCRYPTION_KEY) {
-    if (!/^[a-f0-9]{64}$/i.test(process.env.RECEIPT_ENCRYPTION_KEY)) throw new ApiError("storage_unavailable", "تنظیمات رمزگذاری معتبر نیست.", 503);
-    return Buffer.from(process.env.RECEIPT_ENCRYPTION_KEY, "hex");
+  const configured = process.env.RECEIPT_ENCRYPTION_KEY?.trim();
+  if (configured) {
+    if (!/^[a-f0-9]{64}$/i.test(configured)) throw new ApiError("storage_unavailable", "تنظیمات رمزگذاری معتبر نیست.", 503);
+    return Buffer.from(configured, "hex");
   }
   sandboxOnly();
   // Serverless hosts (Vercel) have no persistent disk: a generated key would change per instance.

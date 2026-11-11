@@ -37,9 +37,9 @@ const schema = z.object({
 
 export type ServerEnv = z.infer<typeof schema>;
 
-/** Empty strings (common in .env files and dashboards) count as "not set". */
+/** Values are trimmed (dashboards often keep a pasted newline); empty strings count as "not set". */
 function normalized(source: NodeJS.ProcessEnv) {
-  return Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined && v.trim() !== ""));
+  return Object.fromEntries(Object.entries(source).flatMap(([k, v]) => v === undefined || v.trim() === "" ? [] : [[k, v.trim()]]));
 }
 
 export function parseEnv(source: NodeJS.ProcessEnv = process.env) {
