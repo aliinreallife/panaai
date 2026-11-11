@@ -1,0 +1,42 @@
+{
+  "name": "nextjs-postgresql-template",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:push": "drizzle-kit push",
+    "test:rules": "node scripts/rules-check.mjs",
+    "test:api": "node scripts/smoke.mjs && node scripts/logic-check.mjs && node scripts/ops-check.mjs && node scripts/privacy-boundary.mjs && node scripts/review-rules.mjs",
+    "test:browser": "node scripts/browser-check.mjs && node scripts/pana-ui-check.mjs && node scripts/accessibility.mjs"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.0",
+    "dotenv": "17.3.1",
+    "drizzle-orm": "0.45.2",
+    "lucide-react": "^1.71.0",
+    "next": "^16.4.6",
+    "pg": "8.20.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.17",
+    "@types/node": "22.19.15",
+    "@types/pg": "8.18.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "^16.4.6",
+    "postcss": "^8.5.32",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3"
+  }
+}

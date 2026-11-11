@@ -1,0 +1,183 @@
+// Pure business rules shared by server and client. No imports, so the file can be
+// unit-tested directly with Node's type stripping (see scripts/rules-check.mjs).
+
+/* ------------------------------------------------------------------ */
+/* Provider (CVC) balance state machine                                */
+/* ------------------------------------------------------------------ */
+export type ProviderState = "healthy" | "low" | "grace" | "zero" | "paused" | "resuming" | "unverified";
+export const PROVIDER_STATE_INFO: Record<ProviderState, { label: string; tone: string; admits: boolean; customer: string }> = {
+  healthy: { label: "سالم", tone: "success", admits: true, customer: "درخواست‌های API به‌طور عادی پذیرفته می‌شوند." },
+  low: { label: "پوشش کم", tone: "warning", admits: true, customer: "درخواست‌ها پذیرفته می‌شوند؛ تیم عملیات در حال تأمین موجودی است." },
+  grace: { label: "دوره ارفاق", tone: "warning", admits: true, customer: "موجودی تأمین‌کننده به پایان رسیده و درخواست‌ها فقط تا پایان دوره کوتاه ارفاق پذیرفته می‌شوند." },
+  zero: { label: "موجودی صفر", tone: "danger", admits: false, customer: "ارسال درخواست API موقتاً متوقف است و پس از تأمین موجودی خودکار ادامه می‌یابد." },
+  paused: { label: "توقف دستی", tone: "danger", admits: false, customer: "ارسال درخواست API توسط تیم عملیات موقتاً متوقف شده است." },
+  resuming: { label: "در حال ازسرگیری", tone: "info", admits: true, customer: "موجودی تأمین شد و پذیرش درخواست‌ها از سر گرفته شده است." },
+  unverified: { label: "تأییدنشده", tone: "warning", admits: false, customer: "اتصال تأمین‌کننده هنوز تأیید نشده و درخواستی ارسال نمی‌شود." },
+};
+export type ProviderInput = { current: ProviderState; balance: number | null; liabilities: number; paused: boolean; graceUntil: Date | null; now: Date; graceMinutes: number; /** balance check failed (timeout/invalid) rather than never configured */ stale?: boolean };
+export type ProviderOutcome = { state: ProviderState; graceUntil: Date | null; tier: number | null; changed: boolean };
+
+/** Coverage tier (100/75/25/0) of verified provider balance against outstanding customer credits. */
+export function coverageTier(balance: number | null, liabilities: number): number | null {
+  if (balance === null) return null;
+  if (balance <= 0) return 0;
+  if (liabilities <= 0) return 100;
+  const ratio = balance / liabilities * 100;
+  return ratio >= 100 ? 100 : ratio >= 75 ? 75 : ratio >= 25 ? 25 : 0;
+}
+
+/**
+ * Deterministic transition function.
+ *  - manual pause wins over everything;
+ *  - no verified balance → unverified (fail closed); a failed/stale check while admitting gets one bounded grace window first;
+ *  - balance hits zero → one bounded grace window, then zero (stop admission, keep selling);
+ *  - balance returns after zero/pause/grace → resuming for one check, then healthy/low.
+ */
+export function nextProviderState(input: ProviderInput): ProviderOutcome {
+  const { current, balance, liabilities, paused, now, graceMinutes } = input;
+  const tier = coverageTier(balance, liabilities);
+  const out = (state: ProviderState, graceUntil: Date | null = null): ProviderOutcome => ({ state, graceUntil, tier, changed: state !== current });
+  if (paused) return out("paused");
+  if (balance === null) {
+    if (input.stale && (current === "healthy" || current === "low" || current === "resuming") && graceMinutes > 0) return out("grace", new Date(now.getTime() + graceMinutes * 60000));
+    if (input.stale && current === "grace" && input.graceUntil && now < input.graceUntil) return out("grace", input.graceUntil);
+    return out("unverified");
+  }
+  if (balance <= 0) {
+    if (current === "zero" || current === "unverified" || current === "paused") return out("zero");
+    if (current === "grace") return input.graceUntil && now < input.graceUntil ? out("grace", input.graceUntil) : out("zero");
+    return graceMinutes > 0 ? out("grace", new Date(now.getTime() + graceMinutes * 60000)) : out("zero");
+  }
+  if (current === "zero" || current === "paused" || current === "grace" || current === "unverified") return out("resuming");
+  return out(tier !== null && tier < 25 ? "low" : "healthy");
+}
+
+/* ------------------------------------------------------------------ */
+/* Request cost bounds (internal credits)                              */
+/* ------------------------------------------------------------------ */
+// Sandbox per-token prices in internal credits. NOT verified CVC tariffs.
+export const MODEL_PRICES: Record<string, { input: number; output: number; maxOutput: number }> = {
+  "gpt-4o": { input: 50, output: 200, maxOutput: 4096 },
+  "claude-3-7-sonnet": { input: 60, output: 300, maxOutput: 4096 },
+  "gemini-2.5-pro": { input: 25, output: 200, maxOutput: 8192 },
+  "deepseek-v3": { input: 6, output: 22, maxOutput: 4096 },
+};
+/** Upper bound reserved before dispatch, so concurrent requests can never overdraw. */
+export function reservationBound(model: string, inputTokens: number, maxTokens?: number | null) {
+  const price = MODEL_PRICES[model];
+  if (!price) throw new Error("unknown_model");
+  const output = Math.min(Math.max(1, maxTokens ?? price.maxOutput), price.maxOutput);
+  return Math.max(1, inputTokens) * price.input + output * price.output;
+}
+export function actualCost(model: string, inputTokens: number, outputTokens: number) {
+  const price = MODEL_PRICES[model];
+  if (!price) throw new Error("unknown_model");
+  return inputTokens * price.input + outputTokens * price.output;
+}
+/** Rough, content-free token estimate used only for the reservation bound. */
+export const estimateTokens = (chars: number) => Math.max(1, Math.ceil(chars / 3));
+
+/* ------------------------------------------------------------------ */
+/* FEFO allocation                                                      */
+/* ------------------------------------------------------------------ */
+export type AllocLot = { id: string; remaining: number; reserved: number; expiresAt: Date };
+/** First-expiring-first-out allocation of `amount` across unexpired lots; null if insufficient. */
+export function allocateFefo(lots: AllocLot[], amount: number, now = new Date()) {
+  const ordered = lots.filter(l => l.expiresAt > now && l.remaining - l.reserved > 0).sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime() || a.id.localeCompare(b.id));
+  const allocations: { lotId: string; amount: number }[] = [];
+  let left = amount;
+  for (const lot of ordered) {
+    if (left <= 0) break;
+    const take = Math.min(left, lot.remaining - lot.reserved);
+    allocations.push({ lotId: lot.id, amount: take });
+    left -= take;
+  }
+  return left > 0 ? null : allocations;
+}
+/** Split the settled amount over the reserved allocations in the same FEFO order. */
+export function splitSettlement(allocations: { lotId: string; amount: number }[], settled: number) {
+  let left = settled;
+  return allocations.map(a => { const used = Math.min(a.amount, left); left -= used; return { ...a, used }; });
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin roles and permissions (RBAC)                                   */
+/* ------------------------------------------------------------------ */
+export type Role = "owner" | "finance" | "support" | "viewer";
+export type Permission = "admin.read" | "payments.review" | "finance.adjust" | "refunds.decide" | "pricing.manage" | "provider.manage" | "alerts.manage" | "users.manage" | "system.manage";
+export const ROLE_INFO: Record<Role, { label: string; description: string }> = {
+  owner: { label: "مالک (سوپرادمین)", description: "همه دسترسی‌ها" },
+  finance: { label: "مالی", description: "بررسی پرداخت، بازپرداخت، اصلاح اعتبار و قیمت‌گذاری" },
+  support: { label: "پشتیبانی", description: "بررسی پرداخت و مدیریت وضعیت کاربر" },
+  viewer: { label: "فقط مشاهده", description: "مشاهده گزارش‌ها بدون هیچ تغییر" },
+};
+export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  owner: ["admin.read", "payments.review", "finance.adjust", "refunds.decide", "pricing.manage", "provider.manage", "alerts.manage", "users.manage", "system.manage"],
+  finance: ["admin.read", "payments.review", "finance.adjust", "refunds.decide", "pricing.manage"],
+  support: ["admin.read", "payments.review", "users.manage"],
+  viewer: ["admin.read"],
+};
+export const can = (role: string, permission: Permission) => (ROLE_PERMISSIONS[role as Role] || []).includes(permission);
+/** Server-side route → permission map. Unknown admin routes are denied. */
+export function permissionFor(route: string, method: string): Permission | null {
+  if (method === "GET") return "admin.read";
+  const rules: [RegExp, Permission][] = [
+    [/^admin\/orders\/[^/]+\/(approve|reject|request-info)$/, "payments.review"],
+    [/^admin\/wallet\/(adjust|reconcile)$/, "finance.adjust"],
+    [/^admin\/refunds\/[^/]+\/(approve|reject|paid)$/, "refunds.decide"],
+    [/^admin\/(pricing|packages)(\/[^/]+)?$/, "pricing.manage"],
+    [/^admin\/models\/[^/]+$/, "pricing.manage"],
+    [/^admin\/provider\/(reconcile|sync|simulate|pause)$/, "provider.manage"],
+    [/^admin\/alerts\/([^/]+\/ack|acknowledge|test)$/, "alerts.manage"],
+    [/^admin\/channels$/, "alerts.manage"],
+    [/^admin\/users\/state$/, "users.manage"],
+    [/^admin\/system$/, "system.manage"],
+  ];
+  return rules.find(([pattern]) => pattern.test(route))?.[1] ?? null;
+}
+/** Routes that manage the operator's own MFA/session; they need no elevation. */
+export const MFA_ROUTES = new Set(["admin/security", "admin/mfa/enroll", "admin/mfa/confirm", "admin/mfa/elevate", "admin/mfa/demo-code", "admin/role", "admin/mfa/drop"]);
+export const ELEVATION_MINUTES = 15;
+
+/* ------------------------------------------------------------------ */
+/* System settings                                                      */
+/* ------------------------------------------------------------------ */
+export const SYSTEM_DEFAULTS = { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20 };
+export const SYSTEM_LIMITS = { transferHours: [1, 72], graceMinutes: [0, 60], lowBalanceCredits: [0, 1000000000], maxKeys: [1, 100] } as const;
+export type SystemSettings = typeof SYSTEM_DEFAULTS;
+export function systemSettings(settings: Record<string, unknown>): SystemSettings {
+  const read = (key: keyof SystemSettings) => {
+    const value = Number(settings[`system:${key}`]);
+    const [min, max] = SYSTEM_LIMITS[key];
+    return Number.isInteger(value) && value >= min && value <= max ? value : SYSTEM_DEFAULTS[key];
+  };
+  return { transferHours: read("transferHours"), graceMinutes: read("graceMinutes"), lowBalanceCredits: read("lowBalanceCredits"), maxKeys: read("maxKeys") };
+}
+
+/* ------------------------------------------------------------------ */
+/* Refund eligibility                                                   */
+/* ------------------------------------------------------------------ */
+/** Only unconsumed, unreserved, unexpired credits of the order's lot are refundable, prorated in rial. */
+export function refundable(order: { amountIrr: number; credits: number }, lot: { remaining: number; reserved: number; expiresAt: Date } | null, now = new Date()) {
+  if (!lot || lot.expiresAt <= now) return { credits: 0, amountIrr: 0 };
+  const credits = Math.max(0, lot.remaining - lot.reserved);
+  return { credits, amountIrr: Number(BigInt(order.amountIrr) * BigInt(credits) / BigInt(Math.max(1, order.credits))) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Numbers                                                              */
+/* ------------------------------------------------------------------ */
+const FA_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
+export const toAsciiDigits = (value: string) => value.replace(/[۰-۹]/g, d => String(FA_DIGITS.indexOf(d))).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+/** Keep only digits (any script) and return ASCII digits without separators or leading zeros. */
+export const digitsOnly = (value: string) => toAsciiDigits(value).replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+/** «۱۲۳۴۵۶۷» → «۱٬۲۳۴٬۵۶۷» */
+export const groupFa = (digits: string) => digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, "٬").replace(/\d/g, d => FA_DIGITS[Number(d)]) : "";
+export function rangeError(raw: string, { min, max, required = false, label = "مقدار" }: { min?: number; max?: number; required?: boolean; label?: string }) {
+  if (!raw) return required ? `${label} را وارد کنید.` : "";
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) return `${label} معتبر نیست.`;
+  if (min !== undefined && value < min) return `${label} باید حداقل ${groupFa(String(min))} باشد.`;
+  if (max !== undefined && value > max) return `${label} نباید بیشتر از ${groupFa(String(max))} باشد.`;
+  return "";
+}
