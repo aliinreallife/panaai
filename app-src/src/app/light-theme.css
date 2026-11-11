@@ -2,19 +2,6 @@
 html[data-theme=light]{--muted:#6d665a;--secondary:#4c463c;--border:#e2dccf;--gold:#8f6312;--control-gradient:linear-gradient(120deg,#fffdf8,#f8f3e8);--chart-bar-1:#e9d29b;--chart-bar-2:#cfa65a;--chart-bar-3:#a97d32;--chart-tip-1:#3d2d12;--chart-tip-2:#2a2116}
 html[data-theme=light] body{background:radial-gradient(ellipse at 70% 0%,#f0dcae33,transparent 55%),var(--canvas)}
 
-/* Welcome hero: warm cream instead of the near-black dark-mode banner. */
-html[data-theme=light] .welcome-hero{background:linear-gradient(110deg,#fffaf0 0%,#f8edd3 55%,#f1dfb6 100%);border-color:#e7d4a6;color:var(--text);box-shadow:0 1px 0 #fff inset,0 6px 22px #8a64180d}
-html[data-theme=light] .welcome-hero .hero-wave{opacity:.35;mix-blend-mode:multiply}
-html[data-theme=light] .hero-eyebrow{color:#86601a}
-html[data-theme=light] .welcome-hero p{color:var(--secondary)}
-html[data-theme=light] .hero-demo{background:#fffdf8cc;border-color:#d9bd7f;color:#7a5512}
-
-/* Quick access: light gold promo card that matches its neighbours. */
-html[data-theme=light] .purchase-promo{background:linear-gradient(125deg,#fbefd2,#f4e3bb 60%,#ecd59f);border-color:#dcc28a;color:#33260c;box-shadow:0 1px 0 #fff8 inset}
-html[data-theme=light] .purchase-promo:hover{background:linear-gradient(125deg,#fdf2d8,#f6e6c1 60%,#efd9a6);border-color:#c9a14d}
-html[data-theme=light] .purchase-promo>.gold-wave{opacity:.18;mix-blend-mode:multiply}
-html[data-theme=light] .purchase-promo>small{color:#6a5021}
-html[data-theme=light] .promo-arrow{color:#fff;background:linear-gradient(130deg,#b98a2e,#8f6312);box-shadow:0 2px 8px #8f63122e}
 html[data-theme=light] .quick-links>a,html[data-theme=light] .quick-links>button{background:var(--card);border-color:var(--border);box-shadow:0 1px 2px #503d170a}
 html[data-theme=light] .quick-links>a:hover,html[data-theme=light] .quick-links>button:hover{border-color:#c9a14d;background:#fffaf0}
 html[data-theme=light] .quick-symbol{background:#b1871e17}

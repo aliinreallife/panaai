@@ -50,7 +50,28 @@ html[data-theme] .pana-shell .sidebar.pana-rail{border-radius:22px;border-color:
 .header-search{border-color:var(--hairline)}
 .header-divider{background:var(--hairline)}
 
-/* Hero: slimmer. */
-@media(min-width:900px){.welcome-hero{height:116px}}
-/* Phones: the sandbox pill sits under the greeting instead of over the text. */
-@media(max-width:560px){.welcome-hero{height:auto;min-height:0;flex-direction:column;align-items:flex-start;gap:8px}.hero-demo{position:static}}
+/* Welcome banner: a quiet card with the date, greeting and two clear actions. */
+html[data-theme] .welcome-hero{height:auto;min-height:0;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:26px 30px;background:radial-gradient(120% 160% at 0% 0%,var(--hero-glow),transparent 55%),var(--card);border:1px solid var(--border);color:var(--text);box-shadow:var(--shadow);overflow:hidden}
+html[data-theme] .welcome-hero::before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,transparent,var(--hero-line) 50%,transparent)}
+html[data-theme=dark]{--hero-glow:#f1c35b12;--hero-line:#f1c35b55;--promo-bg:linear-gradient(160deg,#211d15,#191811);--promo-border:#f1c35b2e}
+html[data-theme=light]{--hero-glow:#e8c97a2e;--hero-line:#c9a14d80;--promo-bg:linear-gradient(160deg,#fdf8ec,#f8efdb);--promo-border:#e6d4a8}
+.welcome-copy{min-width:0}
+html[data-theme] .hero-eyebrow{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:var(--fs-xs);margin-bottom:6px}
+html[data-theme] .welcome-hero h1{font-size:var(--fs-4xl);font-weight:700;line-height:1.45}
+html[data-theme] .welcome-hero p{color:var(--secondary);font-size:var(--fs-sm);margin-top:4px}
+html[data-theme] .hero-demo{position:static;display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;border:1px solid var(--promo-border);background:transparent;color:var(--gold);font-size:var(--fs-2xs)}
+.hero-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.hero-actions .btn{min-height:42px;padding-inline:18px}
+
+/* Buy-credit card: icon, copy and one call to action. No 3D art. */
+html[data-theme] .purchase-promo{min-height:0;height:100%;display:flex;flex-direction:column;justify-content:space-between;align-items:stretch;gap:18px;padding:18px;background:var(--promo-bg);border:1px solid var(--promo-border);color:var(--text);box-shadow:none}
+html[data-theme] .purchase-promo:hover{background:var(--promo-bg);border-color:color-mix(in srgb,var(--gold) 55%,var(--promo-border))}
+.promo-symbol{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:var(--card);border:1px solid var(--promo-border);color:var(--gold)}
+.promo-copy{display:flex;flex-direction:column;gap:4px}
+html[data-theme] .purchase-promo strong{font-size:var(--fs-xl);font-weight:700;white-space:normal}
+html[data-theme] .purchase-promo small{display:block;color:var(--secondary);font-size:var(--fs-xs);line-height:1.8;white-space:normal;margin:0}
+.promo-cta{display:flex;align-items:center;justify-content:space-between;padding-top:14px;border-top:1px solid var(--promo-border);color:var(--gold);font-size:var(--fs-sm);font-weight:600}
+html[data-theme] .promo-arrow{width:30px;height:30px;color:var(--gold);background:transparent;border:1px solid var(--promo-border);box-shadow:none;transition:transform .2s,background .2s}
+html[data-theme] .purchase-promo:hover .promo-arrow{transform:translateX(-3px);background:var(--gold);color:var(--card)}
+
+@media(max-width:700px){html[data-theme] .welcome-hero{flex-direction:column;align-items:stretch;padding:20px}.hero-actions .btn{flex:1}html[data-theme] .welcome-hero h1{font-size:var(--fs-3xl)}}
