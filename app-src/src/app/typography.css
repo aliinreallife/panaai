@@ -1,0 +1,76 @@
+/*
+  PanaAI typography
+  Font: Vazirmatn variable (SIL OFL 1.1), self-hosted from src/app/fonts via next/font/local.
+  Every font-size in the app's stylesheets points at one of these steps, so the scale is changed here only.
+  Persian text needs more room than Latin: the smallest step is 11px, body copy sits at 14px with a
+  1.8 line-height, and headings stay at 1.4 to 1.5 so dots and descenders never clip.
+*/
+:root{
+  --font-ui:var(--font-vazirmatn),Vazirmatn,Tahoma,"Segoe UI",sans-serif;
+  --font-code:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --fs-2xs:11px;  /* captions, chart ticks, badges */
+  --fs-xs:12px;   /* helper text, table meta */
+  --fs-sm:13px;   /* secondary copy, buttons */
+  --fs-base:14px; /* body */
+  --fs-md:15px;   /* panel titles */
+  --fs-lg:17px;
+  --fs-xl:20px;
+  --fs-2xl:23px;
+  --fs-3xl:26px;  /* page titles */
+  --fs-4xl:30px;  /* hero, key figures */
+  --fs-5xl:34px;
+  --fs-6xl:38px;
+  --lh-tight:1.4;
+  --lh-heading:1.55;
+  --lh-body:1.85;
+}
+
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  font-family:var(--font-ui);
+  line-height:var(--lh-body);
+  font-feature-settings:"kern","calt";
+  font-kerning:normal;
+  text-rendering:optimizeLegibility;
+  -moz-osx-font-smoothing:grayscale;
+}
+button,input,select,textarea{font-family:inherit}
+
+/* Headings: tighter leading than body, weight steps that read well in Vazirmatn's variable axis. */
+h1,h2,h3,h4{line-height:var(--lh-heading);text-wrap:balance}
+h1{font-weight:750}
+h2{font-weight:650}
+h3,h4{font-weight:600}
+p,li,dd{text-wrap:pretty}
+
+/* Long Persian paragraphs read best around 70 characters per line. */
+.page-title p,.section-title p,.notice,.rule-list,.docs-content p{max-width:78ch}
+
+/* Numbers.
+   Intl fa-IR already outputs Persian digits (۰-۹) with the Persian thousands separator.
+   Vazirmatn's Persian digits are proportional by default, which keeps amounts compact, so that is the
+   default everywhere. The font's tabular Persian digits (tnum) are used only where a value ticks in place
+   (countdowns, numeric inputs, chart ticks), so those numbers don't jitter as they change. */
+body{font-variant-numeric:proportional-nums}
+.deadline-countdown,.retry-countdown,.quote-countdown-top strong,.numeric-input input,
+.chart-axis-label,.bar-tooltip-text{font-variant-numeric:tabular-nums}
+
+/* Latin-only strings (model names, API keys, codes) keep their own direction and natural spacing. */
+code,pre,kbd,samp,.mono{font-family:var(--font-code);font-variant-numeric:tabular-nums;letter-spacing:0}
+bdi:lang(en),[dir=ltr]{letter-spacing:0}
+
+/* Form controls: typed text and placeholders never drop below the small step. */
+.search-input input,.select-control,.field input::placeholder,.field textarea::placeholder{font-size:var(--fs-sm)}
+
+/* SVG chart text inherits the app font instead of the browser default. */
+svg text{font-family:var(--font-ui)}
+
+/* Theme-specific contrast tuning: thin strokes of Persian letters lose weight on dark backgrounds,
+   so dark mode nudges small text up a little and light mode keeps it crisp. */
+html[data-theme=dark] small,html[data-theme=dark] .muted,html[data-theme=dark] .badge{font-weight:450}
+
+@media (max-width:640px){
+  :root{--fs-3xl:23px;--fs-4xl:26px;--fs-5xl:28px;--fs-6xl:30px}
+  /* 16px stops iOS Safari from zooming the page when a field gets focus. */
+  input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px}
+}
