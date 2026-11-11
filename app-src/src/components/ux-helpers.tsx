@@ -222,9 +222,12 @@ export function OrderTimeline({
 }: {
   steps: { label: string; at: string | null; done: boolean; current?: boolean }[];
 }) {
+  // A later finished step means every earlier step is finished too (e.g. sample orders credited without a receipt time).
+  const lastDone = steps.reduce((last, s, i) => (s.done ? i : last), -1);
+  const items = steps.map((s, i) => ({ ...s, done: s.done || i < lastDone }));
   return (
     <ol className="order-timeline">
-      {steps.map((s, i) => (
+      {items.map((s, i) => (
         <li key={i} className={s.done ? "done" : s.current ? "current" : "todo"}>
           <span className="timeline-dot">{s.done ? <Icon name="check" size={12} /> : fa(i + 1)}</span>
           <div>
@@ -234,7 +237,7 @@ export function OrderTimeline({
                 {persianDate(s.at, { year: "numeric" })}، {persianTime(s.at)}
               </small>
             ) : (
-              <small className="muted">در انتظار</small>
+              <small className="muted">{s.done ? "انجام شد" : s.current ? "مرحله فعلی" : "در انتظار"}</small>
             )}
           </div>
         </li>
