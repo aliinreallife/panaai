@@ -5,14 +5,18 @@
 /* Provider (CVC) balance state machine                                */
 /* ------------------------------------------------------------------ */
 export type ProviderState = "healthy" | "low" | "grace" | "zero" | "paused" | "resuming" | "unverified";
-export const PROVIDER_STATE_INFO: Record<ProviderState, { label: string; tone: string; admits: boolean; customer: string }> = {
-  healthy: { label: "سالم", tone: "success", admits: true, customer: "درخواست‌های API به‌طور عادی پذیرفته می‌شوند." },
-  low: { label: "پوشش کم", tone: "warning", admits: true, customer: "درخواست‌ها پذیرفته می‌شوند؛ تیم عملیات در حال تأمین موجودی است." },
-  grace: { label: "دوره ارفاق", tone: "warning", admits: true, customer: "موجودی تأمین‌کننده به پایان رسیده و درخواست‌ها فقط تا پایان دوره کوتاه ارفاق پذیرفته می‌شوند." },
-  zero: { label: "موجودی صفر", tone: "danger", admits: false, customer: "ارسال درخواست API موقتاً متوقف است و پس از تأمین موجودی خودکار ادامه می‌یابد." },
-  paused: { label: "توقف دستی", tone: "danger", admits: false, customer: "ارسال درخواست API توسط تیم عملیات موقتاً متوقف شده است." },
-  resuming: { label: "در حال ازسرگیری", tone: "info", admits: true, customer: "موجودی تأمین شد و پذیرش درخواست‌ها از سر گرفته شده است." },
-  unverified: { label: "تأییدنشده", tone: "warning", admits: false, customer: "اتصال تأمین‌کننده هنوز تأیید نشده و درخواستی ارسال نمی‌شود." },
+/**
+ * `label`/`customer` are internal (admin) wording. Customers only ever see `service` and `notice`,
+ * which describe panaAI's own API service and never mention an upstream supplier or its balance.
+ */
+export const PROVIDER_STATE_INFO: Record<ProviderState, { label: string; tone: string; admits: boolean; customer: string; service: string; notice: string }> = {
+  healthy: { label: "سالم", tone: "success", admits: true, customer: "درخواست‌های API به‌طور عادی پذیرفته می‌شوند.", service: "فعال", notice: "درخواست‌های API به‌طور عادی پذیرفته می‌شوند." },
+  low: { label: "پوشش کم", tone: "warning", admits: true, customer: "درخواست‌ها پذیرفته می‌شوند؛ تیم عملیات در حال تأمین موجودی است.", service: "فعال", notice: "درخواست‌های API به‌طور عادی پذیرفته می‌شوند." },
+  grace: { label: "دوره ارفاق", tone: "warning", admits: true, customer: "موجودی تأمین‌کننده به پایان رسیده و درخواست‌ها فقط تا پایان دوره کوتاه ارفاق پذیرفته می‌شوند.", service: "فعال", notice: "درخواست‌ها پذیرفته می‌شوند؛ ممکن است سرویس به‌زودی برای مدت کوتاهی محدود شود." },
+  zero: { label: "موجودی صفر", tone: "danger", admits: false, customer: "ارسال درخواست API موقتاً متوقف است و پس از تأمین موجودی خودکار ادامه می‌یابد.", service: "موقتاً در دسترس نیست", notice: "سرویس API موقتاً در دسترس نیست و به‌زودی به‌طور خودکار ادامه می‌یابد." },
+  paused: { label: "توقف دستی", tone: "danger", admits: false, customer: "ارسال درخواست API توسط تیم عملیات موقتاً متوقف شده است.", service: "در حال نگهداری", notice: "سرویس API برای نگهداری موقتاً متوقف شده است." },
+  resuming: { label: "در حال ازسرگیری", tone: "info", admits: true, customer: "موجودی تأمین شد و پذیرش درخواست‌ها از سر گرفته شده است.", service: "فعال", notice: "سرویس API دوباره فعال شده است." },
+  unverified: { label: "تأییدنشده", tone: "warning", admits: false, customer: "اتصال تأمین‌کننده هنوز تأیید نشده و درخواستی ارسال نمی‌شود.", service: "به‌زودی", notice: "سرویس API هنوز فعال نشده است. به‌محض فعال‌شدن، از همین کلیدها می‌توانید استفاده کنید." },
 };
 export type ProviderInput = { current: ProviderState; balance: number | null; liabilities: number; paused: boolean; graceUntil: Date | null; now: Date; graceMinutes: number; /** balance check failed (timeout/invalid) rather than never configured */ stale?: boolean };
 export type ProviderOutcome = { state: ProviderState; graceUntil: Date | null; tier: number | null; changed: boolean };
@@ -117,6 +121,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   support: ["admin.read", "payments.review", "users.manage"],
   viewer: ["admin.read"],
 };
+/** Staff roles. Every other role (e.g. "customer") has no admin surface at all. */
+export const isOperator = (role: string) => Object.hasOwn(ROLE_PERMISSIONS, role);
 export const can = (role: string, permission: Permission) => (ROLE_PERMISSIONS[role as Role] || []).includes(permission);
 /** Server-side route → permission map. Unknown admin routes are denied. */
 export function permissionFor(route: string, method: string): Permission | null {

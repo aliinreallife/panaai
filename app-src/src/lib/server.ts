@@ -9,10 +9,15 @@ import path from "node:path";
 import { MODEL_CATALOG } from "@/lib/shared";
 import { getUsageReport } from "@/lib/analytics";
 import { tehranDay } from "@/lib/report-utils";
-import { systemSettings } from "@/lib/rules";
+import { isOperator, systemSettings } from "@/lib/rules";
 
 export const PRICING = { rateIrr: 900000, creditsPerUsd: 20000000, minToman: 50000, maxToman: 5000000, version: "demo-v1", validityDays: 365 };
 export const isDemo = process.env.PLATFORM_MODE !== "live";
+/**
+ * Sandbox workspaces are customer accounts by default. Set SANDBOX_OPERATOR_ACCESS=true (internal
+ * previews and tests only) to make each new sandbox workspace the operator of its own data.
+ */
+export const sandboxOperatorAccess = isDemo && process.env.SANDBOX_OPERATOR_ACCESS === "true";
 export const pricingFor = (user: typeof s.users.$inferSelect) => ({
   ...PRICING,
   rateIrr: Number(user.settings.fxRateIrr || PRICING.rateIrr),
@@ -25,7 +30,7 @@ export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 400, public retryAfter?: number) { super(message); }
 }
 export function sandboxOnly() {
-  if (!isDemo) throw new ApiError("production_gates_pending", "راه‌اندازی عملیاتی به تأیید قرارداد، بانک، پیامک و زیرساخت نیاز دارد. هیچ پرداخت یا درخواست واقعی پذیرفته نمی‌شود.", 503);
+  if (!isDemo) throw new ApiError("service_not_open", "ثبت‌نام و خرید اعتبار هنوز باز نشده است. به‌زودی از همین‌جا اطلاع‌رسانی می‌شود.", 503);
 }
 const future = (days: number) => new Date(Date.now() + days * 86400000);
 
@@ -77,7 +82,9 @@ export async function getUser() {
   const session = await getSession();
   if (!session) return null;
   const [user] = await db.select().from(s.users).where(eq(s.users.id, session.userId)).limit(1);
-  return user ?? null;
+  // Live mode never serves sandbox workspaces or their sample data, even if an old cookie survives.
+  if (!user || (!isDemo && user.demo)) return null;
+  return user;
 }
 export async function requireUser() {
   const user = await getUser();
@@ -88,7 +95,7 @@ export async function createSandbox() {
   sandboxOnly();
   const token = randomBytes(32).toString("hex");
   const user = await db.transaction(async tx => {
-    const [user] = await tx.insert(s.users).values({ name: "آرین محمدی", demo: true }).returning();
+    const [user] = await tx.insert(s.users).values({ name: "آرین محمدی", demo: true, role: sandboxOperatorAccess ? "owner" : "customer" }).returning();
     await tx.insert(s.sessions).values({ tokenHash: sha(token), userId: user.id, expiresAt: future(7) });
     const now = new Date();
     const seededOrders = await tx.insert(s.orders).values([
@@ -112,7 +119,7 @@ export async function createSandbox() {
     }
     const sampleNames = ["پروژه اصلی", "محیط توسعه", "دستیار شخصی"];
     for (let i = 0; i < 3; i++) {
-      await tx.insert(s.keys).values({ userId: user.id, name: sampleNames[i], prefix: `sk_demo_${randomBytes(3).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 5000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
+      await tx.insert(s.keys).values({ userId: user.id, name: sampleNames[i], prefix: `sk_test_${randomBytes(3).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 5000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
     }
     const weights = [12, 16, 14, 17, 13, 28, 32, 30, 34, 29, 19, 20, 18, 24, 21, 30, 34, 36, 33, 39, 38, 41, 44, 40, 46, 29, 32, 28, 35, 31];
     const total = weights.reduce((a,b) => a+b, 0);
@@ -148,6 +155,8 @@ export async function createSandbox() {
   });
   return { user, token };
 }
+/** Audit events a customer may see (their own payments, receipts, keys). Internal/ops events stay admin-only. */
+const CUSTOMER_AUDIT = /^(payment|receipt|order|key|refund|ticket|settings)\./;
 export async function dataFor(user: typeof s.users.$inferSelect) {
   const { ensureDefaults } = await import("@/lib/ops-api");
   const { evaluateProvider } = await import("@/lib/provider");
@@ -169,10 +178,12 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     db.select().from(s.tickets).where(own(s.tickets.userId)).orderBy(desc(s.tickets.createdAt)),
   ]);
   const eligible = lotRows.filter(l => l.expiresAt > new Date() && l.remaining > 0);
-  return { user: { id: user.id, name: user.name, demo: user.demo, createdAt: user.createdAt, settings: user.settings }, analytics, keys: keyRows, orders: orderRows, lots: lotRows, events: eventRows, daily: analytics.daily, usage: usageRows, audit: auditRows.map(a => ({ ...a, details: a.action.startsWith("payment.") ? { from: a.details.from, to: a.details.to, reasonCode: a.details.reasonCode, customerMessage: a.details.customerMessage } : {} })), tickets: ticketRows,
+  return { user: { id: user.id, name: user.name, demo: user.demo, createdAt: user.createdAt, settings: user.settings }, analytics, keys: keyRows, orders: orderRows, lots: lotRows, events: eventRows, daily: analytics.daily, usage: usageRows, audit: auditRows.filter(a => isOperator(user.role) || CUSTOMER_AUDIT.test(a.action)).map(a => ({ ...a, details: a.action.startsWith("payment.") ? { from: a.details.from, to: a.details.to, reasonCode: a.details.reasonCode, customerMessage: a.details.customerMessage } : {} })), tickets: ticketRows,
     wallet: { available: eligible.reduce((a,l) => a+l.remaining-l.reserved,0), reserved: eligible.reduce((a,l) => a+l.reserved,0), expiring7: eligible.filter(l => l.expiresAt < future(7)).reduce((a,l) => a+l.remaining,0), expiring: eligible.filter(l => l.expiresAt < future(30)).reduce((a,l) => a+l.remaining,0), nearestExpiry: eligible[0]?.expiresAt ?? null },
-    provider: { state: provider.state, admits: provider.admits, simulated: provider.simulated, checkedAt: provider.checkedAt, changedAt: provider.changedAt, graceUntil: provider.graceUntil },
-    account: { state: user.state, role: user.role },
+    // Customer payload: service state only. Balance, source and supplier details stay in admin routes.
+    service: { state: provider.state, admits: provider.admits, checkedAt: provider.checkedAt },
+    account: { state: user.state, role: isOperator(user.role) ? user.role : "customer", operator: isOperator(user.role) },
+    mode: isDemo ? "sandbox" as const : "live" as const,
     packages: packageRows.map(p => ({ id: p.id, label: p.label, subtitle: p.subtitle, amountToman: p.amountToman, icon: p.icon, featured: p.featured })),
     refunds: refundRows,
     system: systemSettings(user.settings),

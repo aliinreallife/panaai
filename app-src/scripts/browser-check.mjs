@@ -36,7 +36,7 @@ assert.ok(await page.getByRole('button', { name: 'ساخت کلید', exact: tru
 await page.getByRole('dialog').screenshot({ path: 'artifacts/03-key-inline-error.png' });
 await rate.fill('60');
 await page.getByRole('button', { name: 'ساخت کلید', exact: true }).click(); await page.getByRole('button', { name: 'کلید را ذخیره کردم' }).waitFor();
-const secret = await page.locator('.secret-code code').innerText(); assert.ok(secret.startsWith('sk_demo_'));
+const secret = await page.locator('.secret-code code').innerText(); assert.ok(secret.startsWith('sk_test_'));
 await page.getByRole('button', { name: 'کلید را ذخیره کردم' }).click();
 pass('key form: Persian grouped digits, inline range error blocks submit, one-time secret');
 

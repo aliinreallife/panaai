@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app-src
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_db
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/app_db
+      PLATFORM_MODE: sandbox
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app-src/package-lock.json
+      - run: npm ci
+      - name: Test-only encryption key
+        run: echo "RECEIPT_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:rules
+      - run: npm run db:push -- --force
+      - run: npm run build
+      - name: Start operator (3000) and customer (3001) servers
+        run: |
+          SANDBOX_OPERATOR_ACCESS=true nohup npx next start -p 3000 > operator.log 2>&1 &
+          nohup npx next start -p 3001 > customer.log 2>&1 &
+          for port in 3000 3001; do
+            for i in $(seq 1 30); do curl -sf "http://localhost:$port/api/health" && break; sleep 2; done
+          done
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:api
+      - run: npm run test:browser
+      - name: Customer never sees the supplier or admin
+        run: npm run test:boundary
+        env:
+          TEST_BASE_URL: http://localhost:3001
+      - name: Server logs
+        if: failure()
+        run: tail -n 200 operator.log customer.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: app-src/artifacts/
+          if-no-files-found: ignore

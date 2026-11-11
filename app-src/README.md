@@ -54,9 +54,11 @@ This is **not a production financial service** and does not claim the PRD's rele
 
 `PLATFORM_MODE` defaults to sandbox. Setting `PLATFORM_MODE=live` closes sandbox session creation, admin access and financial mutations. There is no fallback that silently grants real administrator privileges. In sandbox, admin mutations need demo OTP plus a real RFC 6238 TOTP step-up; live admin stays closed until real SMS is connected.
 
-`GET /v1/models` authenticates platform keys and returns an empty verified model list. Generation endpoints return HTTP 503 `provider_status_unverified`. No prompt/response is persisted, forwarded or billed. Sample catalog names are not verified reseller API model IDs. Concurrent reservation/settlement, streaming reconciliation, provider-capacity admission and 365-day deletion jobs must be implemented and stress-tested against authoritative CVC metering before enabling live dispatch. Deliberately do not remove the fail-closed gate to expose unmetered traffic.
+`GET /v1/models` authenticates platform keys and returns an empty verified model list. Generation endpoints return HTTP 503 `service_unavailable` with `Retry-After`. No prompt/response is persisted, forwarded or billed. Sample catalog names are not verified reseller API model IDs. Concurrent reservation/settlement, streaming reconciliation, provider-capacity admission and 365-day deletion jobs must be implemented and stress-tested against authoritative CVC metering before enabling live dispatch. Deliberately do not remove the fail-closed gate to expose unmetered traffic.
 
-The `/admin` interface is a **sandbox operator for the current demo user's own records only**, not a production super-admin route. Other browsers' records are not visible.
+The `/admin` interface is a **sandbox operator for the current demo user's own records only**, not a production super-admin route. Other browsers' records are not visible. It only exists for staff roles: new sandbox workspaces are `customer` accounts and every `/api/v1/admin/*` route answers 404 for them. Set `SANDBOX_OPERATOR_ACCESS=true` (internal previews and tests only) to make new workspaces operators.
+
+**Customer/supplier boundary.** Customers deal with panaAI as the provider. Customer pages, the customer data payload, `/v1` responses and errors never name the upstream supplier, its balance or a simulator; supplier details exist only in admin screens and admin API routes. `npm run test:boundary` enforces this.
 
 ## Runtime and secrets
 
@@ -76,7 +78,14 @@ Schema: `src/db/schema.ts`. All application access is through Drizzle. To create
 
 Financial records are append-only through exposed application APIs; production hardening should additionally enforce database roles/triggers, backup/restore and retention policy. Financial corrections are not implemented as deletion or direct balance edits.
 
+## Production
+
+What is production-ready, what is still missing for a real launch and how to switch to `PLATFORM_MODE=live`: [docs/PRODUCTION.md](docs/PRODUCTION.md).
+
 ## Validation
+
+CI runs typecheck, lint, the rules tests, a production build and every API/browser suite: `.github/workflows/ci.yml`.
+
 
 - `npx next typegen`
 - `npm exec tsc -- --noEmit --pretty false`

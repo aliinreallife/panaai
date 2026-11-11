@@ -7,9 +7,10 @@ import sharp from "sharp";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { getUsageReport, exportUsage, reportOptions } from "@/lib/analytics";
-import { ApiError, PRICING, createSandbox, dataFor, decryptImage, encryptImage, getUser, limit, requireUser, sandboxOnly, sha, verifier, pricingFor } from "@/lib/server";
+import { ApiError, PRICING, createSandbox, dataFor, isDemo, decryptImage, encryptImage, getUser, limit, requireUser, sandboxOnly, sha, verifier, pricingFor } from "@/lib/server";
 import { MODEL_CATALOG, ascii } from "@/lib/shared";
 import { systemSettings } from "@/lib/rules";
+import { logger } from "@/lib/logger";
 
 type Context = { params: Promise<{ path: string[] }> };
 const uuid = z.string().uuid();
@@ -38,7 +39,7 @@ function errorResponse(error: unknown) {
   if (error instanceof z.ZodError) return success({ code: "validation_error", message: "اطلاعات واردشده کامل یا معتبر نیست. فیلدها را دوباره بررسی کنید.", fields: error.issues.map(i => i.path.join(".")) }, 400);
   const cause = error as { cause?: { code?: string }; code?: string };
   if (cause.code === "23505" || cause.cause?.code === "23505") return success({ code: "bank_reference_duplicate", message: "این مرجع قبلاً ثبت شده است. برای جلوگیری از ثبت دوباره، اطلاعات را بررسی کنید." }, 409);
-  console.error("Platform request failed", { type: error instanceof Error ? error.name : "unknown" });
+  logger.error("platform.request_failed", { error });
   return success({ code: "internal_error", message: "ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.", request_id: randomBytes(8).toString("hex") }, 500);
 }
 export async function handler(req: NextRequest, context: Context) {
@@ -160,7 +161,7 @@ export async function handler(req: NextRequest, context: Context) {
     }
     if (req.method === "POST" && route === "keys") {
       const input = z.object({ name: z.string().trim().min(2).max(50), budget: z.number().int().positive().max(1000000000000).nullable().optional(), rateLimit: z.number().int().min(1).max(300), allowedModels: z.array(z.enum(MODEL_CATALOG.map(m => m.id) as [string, ...string[]])).max(4) }).parse(await json(req));
-      const secret = `sk_demo_${randomBytes(30).toString("hex")}`;
+      const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const created = await db.transaction(async tx => {
         await tx.select().from(s.users).where(eq(s.users.id, user.id)).for("update");
@@ -175,7 +176,7 @@ export async function handler(req: NextRequest, context: Context) {
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "rotate") {
       const id = uuid.parse(segments[1]);
-      const secret = `sk_demo_${randomBytes(30).toString("hex")}`;
+      const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const result = await db.transaction(async tx => {
         const [old] = await tx.select().from(s.keys).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id))).for("update");
@@ -270,7 +271,7 @@ export async function handler(req: NextRequest, context: Context) {
       const { phone } = z.object({ phone: z.string().regex(/^09\d{9}$/) }).parse(await json(req));
       const code = String(randomInt(100000, 1000000));
       const [challenge] = await db.insert(s.otpChallenges).values({ userId: user.id, phone, codeHash: await verifier(code), expiresAt: new Date(Date.now() + 120000) }).returning({ id: s.otpChallenges.id });
-      return success({ challengeId: challenge.id, demoCode: code, demo: true, message: "پیامکی ارسال نشده است؛ این کد فقط برای شبیه‌سازی ورود در محیط آزمایشی است." });
+      return success({ challengeId: challenge.id, demoCode: code, demo: true, message: "پیامکی ارسال نشده است؛ این کد فقط برای ورود در محیط آزمایشی است." });
     }
     if (route === "auth/otp/verify" && req.method === "POST") {
       const input = z.object({ challengeId: uuid, code: z.string().regex(/^\d{6}$/) }).parse(await json(req));

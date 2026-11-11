@@ -8,7 +8,7 @@ export function CommandSearch({ onClose }: { onClose: () => void }) {
   const { data, openKey, openOrder, openUsage } = useApp(); const router = useRouter();
   const [query, setQuery] = useState(""); const [selected, setSelected] = useState(0); const input = useRef<HTMLInputElement>(null); const listId = useId();
   const go = (href: string) => { onClose(); router.push(href); };
-  const routes = [...NAV_ITEMS, { id: "docs", label: "مستندات و راهنما", icon: "docs", href: "/docs" }, { id: "support", label: "پشتیبانی", icon: "support", href: "/support" }, { id: "settings", label: "تنظیمات", icon: "settings", href: "/settings" }, { id: "admin", label: "مدیریت آزمایشی", icon: "shield", href: "/admin" }];
+  const routes = [...NAV_ITEMS, { id: "docs", label: "مستندات و راهنما", icon: "docs", href: "/docs" }, { id: "support", label: "پشتیبانی", icon: "support", href: "/support" }, { id: "settings", label: "تنظیمات", icon: "settings", href: "/settings" }, ...(data.account.operator ? [{ id: "admin", label: "مدیریت", icon: "shield", href: "/admin" }] : [])];
   const actions = [{ id: "new-key", title: "ساخت کلید API", description: "عملیات سریع · کلید اختصاصی پروژه", icon: "keys", run: () => { onClose(); setTimeout(openKey, 30); } }, ...routes.map(item => ({ id: item.id, title: item.label, description: "صفحه · فضای کار شما", icon: item.icon, run: () => go(item.href) }))];
   const records = query.trim() ? [
     ...data.orders.map(o => ({ id: o.id, title: o.reference, description: `سفارش · ${compact(o.credits)} اعتبار`, icon: "orders", run: () => { onClose(); setTimeout(() => openOrder(o), 30); } })),

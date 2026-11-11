@@ -12,7 +12,7 @@ const TITLES: Record<string, string> = {
   docs: "مستندات و راهنما",
   settings: "تنظیمات حساب",
   support: "پشتیبانی",
-  admin: "مدیریت آزمایشی",
+  admin: "مدیریت",
   roadmap: "وضعیت پیاده‌سازی PRD",
 };
 export async function generateMetadata({ params }: { params: Promise<{ slug: string[] }> }): Promise<Metadata> {

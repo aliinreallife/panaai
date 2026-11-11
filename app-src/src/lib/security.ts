@@ -3,7 +3,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { ApiError, decryptImage, encryptImage, getSession, isDemo } from "@/lib/server";
-import { ELEVATION_MINUTES, MFA_ROUTES, ROLE_INFO, ROLE_PERMISSIONS, can, permissionFor, type Role } from "@/lib/rules";
+import { ELEVATION_MINUTES, MFA_ROUTES, ROLE_INFO, ROLE_PERMISSIONS, can, isOperator, permissionFor, type Role } from "@/lib/rules";
 import { newTotpSecret, otpauthUri, totp, verifyTotp } from "@/lib/totp";
 
 type User = typeof s.users.$inferSelect;
@@ -27,6 +27,8 @@ export async function securityStatus(user: User) {
  *  3. every mutation additionally needs a session elevated with OTP (phone) + TOTP in the last 15 minutes.
  */
 export async function authorizeAdmin(user: User, route: string, method: string) {
+  // Customers get the same answer as for a route that does not exist: the admin surface is invisible to them.
+  if (!isOperator(user.role)) throw new ApiError("not_found", "مسیر یافت نشد.", 404);
   if (MFA_ROUTES.has(route)) return;
   const permission = permissionFor(route, method);
   if (!permission) throw new ApiError("not_found", "عملیات مدیریتی یافت نشد.", 404);

@@ -42,8 +42,9 @@ export type AppData = {
   events: { id: string; lotId: string; type: string; delta: number; description: string; createdAt: string }[];
   audit: AuditItem[]; tickets: TicketItem[];
   wallet: { available: number; reserved: number; expiring7: number; expiring: number; nearestExpiry: string | null };
-  provider: { state: import("@/lib/rules").ProviderState; admits: boolean; simulated: boolean; checkedAt: string | null; changedAt: string; graceUntil: string | null };
-  account: { state: string; role: string };
+  service: { state: import("@/lib/rules").ProviderState; admits: boolean; checkedAt: string | null };
+  account: { state: string; role: string; operator: boolean };
+  mode: "sandbox" | "live";
   packages: PackageItem[];
   refunds: RefundItem[];
   system: import("@/lib/rules").SystemSettings;

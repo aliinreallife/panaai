@@ -2,7 +2,7 @@ import type { AppData } from "@/lib/shared";
 import { compact } from "@/lib/shared";
 export type AppNotification = { id: string; title: string; description: string; href: string; icon: string; tone: string; createdAt: string };
 export function notificationsFor(data: AppData): AppNotification[] {
-  const items: AppNotification[] = [{ id: "welcome", title: "به فضای آزمایشی PanaAI خوش آمدید", description: "اعتبار و درخواست‌ها نمونه‌اند. پرداخت واقعی و ارسال به CVC فعال نیست.", href: "/docs", icon: "sparkle", tone: "gold", createdAt: data.user.createdAt }];
+  const items: AppNotification[] = [{ id: "welcome", title: data.mode === "sandbox" ? "به فضای آزمایشی PanaAI خوش آمدید" : "به PanaAI خوش آمدید", description: data.mode === "sandbox" ? "اعتبار و درخواست‌های این محیط نمونه‌اند و پرداخت واقعی انجام نمی‌شود." : "برای شروع، یک کلید API بسازید و راهنمای اتصال را ببینید.", href: "/docs", icon: "sparkle", tone: "gold", createdAt: data.user.createdAt }];
   if (data.wallet.expiring > 0 && data.user.settings.expiry !== false) items.push({ id: `expiry:${data.wallet.nearestExpiry}`, title: "بخشی از اعتبارتان نزدیک به انقضاست", description: `${compact(data.wallet.expiring)} اعتبار در ۳۰ روز آینده منقضی می‌شود.`, href: "/wallet", icon: "clock", tone: "warm", createdAt: data.user.createdAt });
   if (data.user.settings.payments !== false) for (const event of data.audit) {
     const order = data.orders.find(o => o.id === event.targetId);

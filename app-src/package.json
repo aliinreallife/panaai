@@ -10,7 +10,8 @@
     "db:push": "drizzle-kit push",
     "test:rules": "node scripts/rules-check.mjs",
     "test:api": "node scripts/smoke.mjs && node scripts/logic-check.mjs && node scripts/ops-check.mjs && node scripts/privacy-boundary.mjs && node scripts/review-rules.mjs",
-    "test:browser": "node scripts/browser-check.mjs && node scripts/pana-ui-check.mjs && node scripts/accessibility.mjs"
+    "test:browser": "node scripts/browser-check.mjs && node scripts/pana-ui-check.mjs && node scripts/accessibility.mjs",
+    "test:boundary": "node scripts/customer-boundary.mjs"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.14.0",
@@ -38,5 +39,8 @@
     "postcss": "^8.5.32",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

@@ -173,7 +173,7 @@ function RefundDecision({ refund, onClose, act, onDone }: { refund: RefundItem; 
   return <Modal title={refund.state === "requested" ? "بررسی درخواست بازپرداخت" : "ثبت واریز بازپرداخت"} description={`${fa(refund.amountIrr / 10)} تومان · ${compact(refund.credits)} اعتبار`} onClose={onClose}>
     <Notice title="دلیل مشتری">{refund.reason}</Notice>
     {refund.state === "approved" && <label className="field">مرجع واریز خروجی بانک<input dir="ltr" value={payout} onChange={e => setPayout(e.target.value)} minLength={4} maxLength={100} placeholder="PAYOUT-REFERENCE" /></label>}
-    <label className="field">یادداشت تصمیم <small>(حداقل ۱۰ نویسه)</small><textarea value={note} onChange={e => setNote(e.target.value)} rows={3} minLength={10} maxLength={1000} /><CharCount value={note} max={1000} /></label>
+    <label className="field"><span className="field-label">یادداشت تصمیم <small>(حداقل ۱۰ نویسه)</small></span><textarea value={note} onChange={e => setNote(e.target.value)} rows={3} minLength={10} maxLength={1000} /><CharCount value={note} max={1000} /></label>
     {error && <div className="form-error" role="alert">{error}</div>}
     <div className="modal-actions">{refund.state === "requested" ? <><Button tone="danger" busy={busy === "reject"} disabled={note.trim().length < 10} onClick={() => decide("reject")}>رد درخواست</Button><Button busy={busy === "approve"} disabled={note.trim().length < 10} onClick={() => decide("approve")}>تأیید و برداشت اعتبار</Button></> : <Button busy={busy === "paid"} disabled={note.trim().length < 10 || payout.trim().length < 4} onClick={() => decide("paid")}>ثبت واریز (شبیه‌سازی)</Button>}</div>
   </Modal>;

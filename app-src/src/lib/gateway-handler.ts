@@ -8,6 +8,7 @@ import { release, reserve, settle } from "@/lib/wallet";
 import { PROVIDER_STATE_INFO, actualCost, estimateTokens, reservationBound, MODEL_PRICES } from "@/lib/rules";
 import { MODEL_CATALOG } from "@/lib/shared";
 import { randomUUID } from "node:crypto";
+import { logger } from "@/lib/logger";
 
 const MAX_BODY = 256 * 1024;
 type Message = { role?: unknown; content?: unknown };
@@ -25,16 +26,17 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     if (!key) return error("invalid_api_key", "کلید API معتبر نیست.", 401);
     if (!key.enabled) return error("key_revoked", "این کلید لغو شده است.", 401);
     const [user] = await db.select().from(users).where(eq(users.id, key.userId)).limit(1);
-    if (!user || user.state !== "active") return error("account_suspended", "حساب کاربری این کلید معلق است.", 403);
+    if (!user || (!isDemo && user.demo)) return error("invalid_api_key", "کلید API معتبر نیست.", 401);
+    if (user.state !== "active") return error("account_suspended", "حساب کاربری این کلید معلق است.", 403);
     await limit(`api-key:${key.id}`, key.rateLimit);
     if (key.budget !== null && key.spent >= key.budget) return error("key_budget_exceeded", "بودجه کلید به پایان رسیده است.", 403);
     const path = (await context.params).path.join("/");
     const enabledModels = MODEL_CATALOG.filter(m => user.settings[`model:${m.id}`] !== false && (!key.allowedModels.length || key.allowedModels.includes(m.id)));
     if (path === "models" && req.method === "GET") {
       const provider = await evaluateProvider(user);
-      // Sandbox: models are served by a simulator, never by a real upstream. Live: nothing is verified yet.
-      const data = isDemo && provider.admits ? enabledModels.map(m => ({ id: m.id, object: "model", owned_by: "sandbox-simulator", created: 0 })) : [];
-      return NextResponse.json({ object: "list", data, metadata: { mode: isDemo ? "sandbox" : "live", provider_state: provider.state, simulated: isDemo } }, { headers: headers() });
+      // Public response: panaAI is the provider. Supplier names, states and balances never leave the server.
+      const data = isDemo && provider.admits ? enabledModels.map(m => ({ id: m.id, object: "model", owned_by: "panaai", created: 0 })) : [];
+      return NextResponse.json({ object: "list", data }, { headers: headers() });
     }
     if (!["chat/completions", "responses"].includes(path)) return error("unsupported_endpoint", "این مسیر پشتیبانی نمی‌شود.", 404);
     if (req.method !== "POST") return error("method_not_allowed", "فقط POST پشتیبانی می‌شود.", 405);
@@ -43,7 +45,7 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     const provider = await evaluateProvider(user);
     if (!provider.admits || !isDemo) {
       const state = isDemo ? provider.state : "unverified";
-      return error(state === "unverified" ? "provider_status_unverified" : "provider_unavailable", `${PROVIDER_STATE_INFO[state].customer} هیچ اعتباری کسر و هیچ محتوایی ذخیره نشده است.`, 503, state === "zero" || state === "paused" ? { "Retry-After": "60" } : {});
+      return error("service_unavailable", `${PROVIDER_STATE_INFO[state].notice} هیچ اعتباری کسر و هیچ محتوایی ذخیره نشده است.`, 503, { "Retry-After": state === "unverified" ? "3600" : "60" });
     }
     // 2. Validate the request. Content is measured, never stored or logged.
     if (Number(req.headers.get("content-length") || 0) > MAX_BODY) return error("payload_too_large", "حجم درخواست بیش از حد مجاز است.", 413);
@@ -64,10 +66,10 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     await reserve({ userId: user.id, keyId: key.id, requestId, model, amount: bound });
     reserved = true;
 
-    // 4. Simulated upstream (sandbox only). No prompt or response is persisted.
+    // 4. Sandbox response (no model is called). No prompt or response is persisted.
     const started = Date.now();
     const outputTokens = Math.min(maxTokens ?? 256, 64 + (inputTokens % 97));
-    const content = "این پاسخ توسط شبیه‌ساز محیط آزمایشی تولید شده است؛ هیچ مدل واقعی فراخوانی نشد.";
+    const content = "این یک پاسخ نمونه از محیط آزمایشی PanaAI است.";
     const latency = Date.now() - started + 180;
 
     // 5. Settle exactly once with the actual (≤ reserved) cost.
@@ -82,7 +84,7 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
   } catch (e) {
     if (reserved) await release(requestId).catch(() => undefined);
     if (e instanceof ApiError) return error(e.code, e.message, e.status, e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {});
-    console.error("Gateway request failed", { type: e instanceof Error ? e.name : "unknown" });
-    return error("provider_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
+    logger.error("gateway.request_failed", { requestId, error: e });
+    return error("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
   }
 }
