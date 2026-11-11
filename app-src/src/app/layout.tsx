@@ -9,6 +9,7 @@ import "./ops-polish.css";
 import "./typography.css";
 import "./layout-fixes.css";
 import "./light-theme.css";
+import "./refine.css";
 
 // Vazirmatn variable font (SIL OFL 1.1), served from this app. next/font preloads it,
 // hashes the file name for long caching and adds a size-matched fallback to avoid layout shift.

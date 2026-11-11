@@ -1,0 +1,56 @@
+/* Minimal, premium refinement layer. Loaded last. Fewer gradients, one radius scale,
+   quieter tables and badges, calmer hover states. Works in both themes via the shared tokens. */
+:root,html[data-theme=dark]{--r-card:18px;--r-inner:12px;--r-ctl:10px;--panel-gradient:linear-gradient(180deg,#1b1d24,#17191f);--control-gradient:linear-gradient(180deg,#22242b,#1d1f26);--shadow:0 1px 0 #ffffff07 inset,0 12px 32px -18px #00000080;--hairline:#ffffff12;--row-hover:#ffffff05}
+html[data-theme=light]{--panel-gradient:linear-gradient(180deg,#fffefb,#fffcf6);--control-gradient:linear-gradient(180deg,#fffefb,#faf6ee);--shadow:0 1px 2px #2a1f0a08,0 12px 28px -16px #2a1f0a1f;--hairline:#e9e3d6;--row-hover:#b1871e08}
+
+/* Surfaces: one radius, flat fill, soft shadow. */
+html[data-theme] .panel,html[data-theme] .metric-card,html[data-theme] .balance-card,.summary-stat{border-radius:var(--r-card)}
+.welcome-hero{border-radius:var(--r-card)}
+html[data-theme] .modal{border-radius:22px;background:var(--card)}
+.purchase-promo,.quick-links>a,.quick-links>button,html[data-theme] .package-card,html[data-theme] .destination-card{border-radius:var(--r-inner)}
+html[data-theme] .notice,.notice{border-radius:var(--r-inner)}
+
+/* Calm motion: no lifting cards, only colour changes. */
+.summary-stat:hover,.quick-links>a:hover,.quick-links>button:hover{transform:none}
+.summary-stat:hover{border-color:color-mix(in srgb,var(--gold) 35%,var(--border))}
+.quick-links>a:hover,.quick-links>button:hover{border-color:color-mix(in srgb,var(--gold) 45%,var(--border))}
+
+/* Page header: action sits on the title baseline, notices use the full width. */
+.page-title{align-items:flex-end}
+.page-title h1{font-weight:700;letter-spacing:0}
+.main-content .notice{max-width:none}
+.main-content .notice>div,.main-content .notice p{max-width:90ch}
+
+/* Buttons: single-tone, 10px radius. */
+.btn{border-radius:var(--r-ctl)}
+html[data-theme=dark] .btn-primary{background:#efc15a;border-color:#f5cf75;color:#241a07;box-shadow:0 1px 0 #fff3 inset}
+html[data-theme=dark] .btn-primary:hover{background:#f6cd6c;filter:none}
+html[data-theme=light] .btn-primary{background:#8a5e10;border-color:#7a520c;color:#fff;box-shadow:0 1px 0 #ffffff26 inset,0 4px 12px -6px #8a5e1066}
+html[data-theme=light] .btn-primary:hover{background:#9a6b16;border-color:#8a5e10;filter:none}
+.btn-secondary{background:var(--card)}
+.btn-secondary:hover{border-color:color-mix(in srgb,var(--gold) 45%,var(--border))}
+
+/* Badges: small pills, lighter weight. */
+html[data-theme] .badge{border-radius:999px;padding:3px 10px;font-weight:500}
+
+/* Tables: no tinted header, hairline rows, gentle hover. */
+html[data-theme] th{background:transparent;color:var(--muted);font-weight:500;border-bottom:1px solid var(--hairline)}
+html[data-theme] td{border-color:var(--hairline)}
+html[data-theme] tbody tr{transition:background .15s}
+html[data-theme] tbody tr:hover{background:var(--row-hover)}
+
+/* Inputs and segmented controls. */
+html[data-theme] .field input,html[data-theme] .field textarea,html[data-theme] .field select{border-radius:var(--r-ctl)}
+html[data-theme] .field input:focus,html[data-theme] .field textarea:focus,html[data-theme] .field select:focus{border-color:color-mix(in srgb,var(--gold) 60%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 14%,transparent)}
+:focus-visible{outline-offset:3px}
+
+/* Rail and header: quieter chrome. */
+html[data-theme] .pana-shell .sidebar.pana-rail{border-radius:22px;border-color:var(--hairline)}
+.rail-link.rail-active{box-shadow:none}
+.header-search{border-color:var(--hairline)}
+.header-divider{background:var(--hairline)}
+
+/* Hero: slimmer. */
+@media(min-width:900px){.welcome-hero{height:116px}}
+/* Phones: the sandbox pill sits under the greeting instead of over the text. */
+@media(max-width:560px){.welcome-hero{height:auto;min-height:0;flex-direction:column;align-items:flex-start;gap:8px}.hero-demo{position:static}}
