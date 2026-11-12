@@ -15,8 +15,15 @@ export async function adminAction(req: NextRequest, user: typeof users.$inferSel
     return done();
   }
   if (route === "admin/provider/sync" && req.method === "POST") {
-    await db.insert(audit).values({ userId: user.id, action: "provider.sync_requested", details: { outcome: "not_configured", verified: false } });
-    throw new ApiError("provider_status_unverified", "آدرس و اعتبارنامه تأییدشده همگام‌سازی CVC تنظیم نشده است. موجودی همچنان نامشخص است.", 503);
+    const { evaluateProvider } = await import("@/lib/provider");
+    const { cvcBalanceConfigured } = await import("@/lib/cvc");
+    if (!cvcBalanceConfigured() && process.env.PLATFORM_MODE !== "sandbox") {
+      await db.insert(audit).values({ userId: user.id, action: "provider.sync_requested", details: { outcome: "not_configured", verified: false } });
+      throw new ApiError("provider_status_unverified", "کلید اجرایی CVC (CVC_RUNTIME_API_KEY) تنظیم نشده است. موجودی همچنان نامشخص است.", 503);
+    }
+    const view = await evaluateProvider(user, { force: true, reason: "manual_sync" });
+    await db.insert(audit).values({ userId: user.id, action: "provider.sync_requested", details: { outcome: view.source, state: view.state, verified: view.source.startsWith("cvc_") && view.balance !== null } });
+    return NextResponse.json(view, { headers: { "Cache-Control": "private, no-store" } });
   }
   if (route === "admin/pricing" && req.method === "PUT") {
     const input = z.object({ rateIrr: z.number().int().min(10000).max(100000000), minToman: z.number().int().min(1000).max(5000000), maxToman: z.number().int().min(1000).max(100000000), reason: z.string().trim().min(10).max(1000) }).parse(await getBody());

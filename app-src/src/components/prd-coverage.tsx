@@ -16,8 +16,8 @@ const STATUS_FA: Record<Status, { label: string; tone: string }> = {
 const DECISIONS: Item[] = [
   { id: "D01", title: "رابط فارسی و راست‌به‌چپ", status: "done", note: "کل رابط فارسی، RTL، فونت وزیرمتن، تاریخ شمسی و ارقام فارسی با جداکننده هزارگان." },
   { id: "D02", title: "ورود با OTP موبایل", status: "sandbox", note: "انقضا، یک‌بارمصرف، محدودیت تلاش و ارسال مجدد کار می‌کند؛ پیامک واقعی وصل نیست و کد نمایش داده می‌شود." },
-  { id: "D03", title: "CVC به‌عنوان تأمین‌کننده", status: "sandbox", note: "درگاه سازگار با OpenAI با رزرو و تسویه کار می‌کند، اما پاسخ‌ها از شبیه‌ساز می‌آیند؛ قرارداد و API واقعی CVC تأیید نشده." },
-  { id: "D04", title: "کلیدها در کلاینت‌های ثالث", status: "sandbox", note: "Base URL و مسیرهای ‎/v1/models، ‎/v1/chat/completions و ‎/v1/responses پاسخ شبیه‌سازی‌شده می‌دهند." },
+  { id: "D03", title: "CVC به‌عنوان تأمین‌کننده", status: "partial", note: "کلاینت reseller (موجودی/مدل‌ها/ساخت کلید) بر اساس قرارداد API پیاده شد؛ ارسال واقعی inference هنوز fail-closed است تا meter تأیید شود." },
+  { id: "D04", title: "کلیدها در کلاینت‌های ثالث", status: "sandbox", note: "Base URL و مسیرهای ‎/v1/models، ‎/v1/chat/completions و ‎/v1/responses در sandbox شبیه‌سازی می‌شوند؛ پروکسی زنده هنوز فعال نیست." },
   { id: "D05", title: "اعتبار داخلی (نه توکن خام)", status: "done", note: "واحد اعتبار داخلی در کیف پول، گزارش و خروجی جدا از توکن است." },
   { id: "D06", title: "نرخ ۲۰M اعتبار به ازای هر دلار", status: "sandbox", note: "فرمول BigInt با گرد کردن به پایین کار می‌کند؛ نسبت تجاری و تعرفه مدل‌ها نیازمند تأیید است." },
   { id: "D07", title: "نرخ ارز خودکار + دستی", status: "partial", note: "override دستی نسخه‌دار با دلیل و حسابرسی؛ منبع بازار و کنترل کهنگی وصل نیست." },
@@ -28,7 +28,7 @@ const DECISIONS: Item[] = [
   { id: "D12", title: "بدون overdraft", status: "done", note: "رزرو سقف هزینه پیش از ارسال؛ ۲۰ درخواست هم‌زمان هرگز از موجودی بیشتر مصرف نمی‌کنند." },
   { id: "D13", title: "چند کلید با بودجه و محدودیت", status: "done", note: "بودجه، نرخ و allowlist مدل در درگاه اعمال می‌شود (نه فقط در رابط)." },
   { id: "D14", title: "کاتالوگ مدل‌ها", status: "sandbox", note: "روشن/خاموش کردن مدل روی درگاه اثر دارد؛ شناسه و تعرفه واقعی CVC تأیید نشده." },
-  { id: "D15", title: "همگام‌سازی موجودی CVC", status: "sandbox", note: "ماشین وضعیت با بررسی تنبل هر ۳۰ ثانیه؛ منبع موجودی شبیه‌ساز است و در حالت عملیاتی به CVC_BALANCE_URL نیاز دارد." },
+  { id: "D15", title: "همگام‌سازی موجودی CVC", status: "partial", note: "ماشین وضعیت + کلاینت GET /v1/balance با CVC_RUNTIME_API_KEY؛ بدون کلید، وضعیت تأییدنشده می‌ماند. شکل دقیق JSON در صورت نیاز با پاسخ زنده محکم می‌شود." },
   { id: "D16", title: "فروش بیش‌از‌موجودی با هشدار", status: "sandbox", note: "سطوح پوشش ۱۰۰/۷۵/۲۵/۰ و هشدار افت سطح؛ فروش متوقف نمی‌شود." },
   { id: "D17", title: "موجودی صفر: توقف درخواست، ادامه فروش", status: "sandbox", note: "در وضعیت «صفر» درگاه ۵۰۳ با Retry-After می‌دهد و خرید اعتبار باز می‌ماند (آزموده)." },
   { id: "D18", title: "پنجره grace محدود", status: "sandbox", note: "پیش‌فرض ۵ دقیقه، قابل تنظیم ۰ تا ۶۰ در تنظیمات سیستم؛ عدد نهایی باید تصویب شود." },
@@ -101,7 +101,7 @@ const ACCEPTANCE: Item[] = [
 
 const GATES: Item[] = [
   { id: "V01", title: "مجوز مکتوب فروش مجدد CVC", status: "todo", note: "پیش‌نیاز هر ارسال واقعی." },
-  { id: "V02–V05", title: "نرخ، واحد billable، موجودی و endpointها", status: "todo", note: "تأیید برنامه‌ای تعرفه، meter، balance و مسیرها." },
+  { id: "V02–V05", title: "نرخ، واحد billable، موجودی و endpointها", status: "partial", note: "مسیرهای reseller مستند شدند (keys/balance/models/runtime). هنوز نیاز: تأیید تعرفه/multiplier، نگاشت cost_tokens↔اعتبار داخلی، و یک پاسخ واقعی balance/models." },
   { id: "V06–V09", title: "grace، کارت بانکی، مهلت و بازپرداخت", status: "todo", note: "تصمیم‌ها و سیاست‌های بانکی/حقوقی مالک." },
   { id: "V10–V12", title: "FX، پیامک و حریم خصوصی", status: "todo", note: "انتخاب vendor و سیاست نگهداری رسید/مالی." },
   { id: "V13–V14", title: "حسابداری و SLA", status: "todo", note: "شناسایی درآمد، مالیات و ساعات بررسی." },

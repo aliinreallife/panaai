@@ -119,6 +119,10 @@ You can also connect Neon from inside Vercel: Project → Storage → Neon. That
 | `NEXT_PUBLIC_BRAND_NAME` | no | label shown in the UI |
 | `TELEGRAM_BOT_TOKEN` | no | for Telegram alerts |
 | `RESEND_API_KEY`, `ALERT_EMAIL_FROM` | no | for e-mail alerts through Resend |
+| `CVC_BASE_URL` | no | reseller API origin without `/v1` (default `https://ru.cheapvibecode.ru`) |
+| `CVC_PRIMARY_API_KEY` | no | reseller control-plane key (create/edit/transfer keys); server only |
+| `CVC_RUNTIME_API_KEY` | no | delegated key for balance/models; required for live upstream sync |
+| `CVC_BALANCE_URL`, `CVC_API_KEY` | no | legacy balance override; prefer `CVC_BASE_URL` + `CVC_RUNTIME_API_KEY` |
 
 The app validates its environment at startup (`src/lib/env.ts`). A production server with a missing or malformed required variable refuses to start and prints exactly which variable is wrong, instead of failing on the first request.
 

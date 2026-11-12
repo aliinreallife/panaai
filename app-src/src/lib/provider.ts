@@ -17,19 +17,18 @@ async function liabilities(tx: Tx | typeof db, userId: string) {
 }
 
 /**
- * Balance source. In live mode a real CVC balance endpoint must be configured
- * (CVC_BALANCE_URL + CVC_API_KEY); until then the provider stays `unverified`
- * and the gateway fails closed. The sandbox uses an operator-controlled simulator.
+ * Balance source. In live mode the reseller runtime key calls GET /v1/balance
+ * (see src/lib/cvc.ts). Legacy CVC_BALANCE_URL + CVC_API_KEY still works.
+ * Until configured, the provider stays `unverified` and the gateway fails closed.
+ * The sandbox uses an operator-controlled simulator.
  */
 async function observeBalance(stored: number | null): Promise<{ balance: number | null; source: string }> {
   if (isDemo) return { balance: stored, source: "sandbox_simulator" };
-  if (!process.env.CVC_BALANCE_URL || !process.env.CVC_API_KEY) return { balance: null, source: "not_configured" };
-  try {
-    const res = await fetch(process.env.CVC_BALANCE_URL, { headers: { Authorization: `Bearer ${process.env.CVC_API_KEY}` }, signal: AbortSignal.timeout(5000), cache: "no-store" });
-    const body = await res.json() as { balance?: unknown };
-    const balance = Number(body.balance);
-    return res.ok && Number.isSafeInteger(balance) ? { balance, source: "cvc_api" } : { balance: null, source: "cvc_invalid_response" };
-  } catch { return { balance: null, source: "cvc_unreachable" }; }
+  const { cvcBalanceConfigured, fetchCvcBalance } = await import("@/lib/cvc");
+  if (!cvcBalanceConfigured()) return { balance: null, source: "not_configured" };
+  const result = await fetchCvcBalance();
+  if (result.ok) return { balance: result.data, source: result.source };
+  return { balance: null, source: result.source };
 }
 
 export async function ensureProviderRow(userId: string) {
