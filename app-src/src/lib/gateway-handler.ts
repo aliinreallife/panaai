@@ -16,25 +16,14 @@ import {
   systemSettings,
 } from "@/lib/rules";
 import { MODEL_CATALOG } from "@/lib/shared";
-import { cvcLiveDispatchEnabled, parseCvcModels, proxyCvcJson } from "@/lib/cvc";
+import { cvcLiveDispatchEnabled, proxyCvcJson } from "@/lib/cvc";
+import { resolveModelCatalog } from "@/lib/models";
 import { randomUUID } from "node:crypto";
 import { logger } from "@/lib/logger";
 
 const MAX_BODY = 256 * 1024;
 type Message = { role?: unknown; content?: unknown };
 const textLength = (value: unknown): number => typeof value === "string" ? value.length : Array.isArray(value) ? value.reduce((a: number, part) => a + textLength((part as { text?: unknown })?.text ?? part), 0) : 0;
-
-type SyncedModel = { id: string; multiplier: number };
-
-function syncedCatalog(settings: Record<string, unknown>): SyncedModel[] {
-  const raw = settings["cvc:catalog"];
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    return parseCvcModels(JSON.parse(raw)).map(m => ({ id: m.id, multiplier: m.multiplier && m.multiplier > 0 ? m.multiplier : 1 }));
-  } catch {
-    return [];
-  }
-}
 
 export async function handle(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const requestId = `req_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -55,17 +44,15 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
 
     const path = (await context.params).path.join("/");
     const live = cvcLiveDispatchEnabled();
-    const catalog = syncedCatalog(user.settings);
+    const catalog = await resolveModelCatalog(user.settings);
+    const enabledCatalog = catalog.filter(m => user.settings[`model:${m.id}`] !== false && (!key.allowedModels.length || key.allowedModels.includes(m.id)));
     const sandboxModels = MODEL_CATALOG.filter(m => user.settings[`model:${m.id}`] !== false && (!key.allowedModels.length || key.allowedModels.includes(m.id)));
-    const liveModels = (catalog.length ? catalog : MODEL_CATALOG.map(m => ({ id: m.id, multiplier: 1 })))
-      .filter(m => user.settings[`model:${m.id}`] !== false && (!key.allowedModels.length || key.allowedModels.includes(m.id)));
 
     if (path === "models" && req.method === "GET") {
       const provider = await evaluateProvider(user);
       const admits = provider.admits && (isDemo || live);
-      const data = admits
-        ? (live ? liveModels : sandboxModels).map(m => ({ id: m.id, object: "model", owned_by: "panaai", created: 0 }))
-        : [];
+      const rows = live ? enabledCatalog : sandboxModels;
+      const data = admits ? rows.map(m => ({ id: m.id, object: "model", owned_by: "panaai", created: 0 })) : [];
       return NextResponse.json({ object: "list", data }, { headers: headers() });
     }
     if (!["chat/completions", "responses"].includes(path)) return error("unsupported_endpoint", "این مسیر پشتیبانی نمی‌شود.", 404);
@@ -96,7 +83,7 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     const synced = catalog.find(m => m.id === model);
     const knownSandbox = !!MODEL_PRICES[model];
     if (live) {
-      if (!liveModels.some(m => m.id === model) && !knownSandbox) return error("model_not_found", "مدل درخواستی وجود ندارد.", 404);
+      if (!enabledCatalog.some(m => m.id === model) && !knownSandbox) return error("model_not_found", "مدل درخواستی وجود ندارد.", 404);
       if (key.allowedModels.length && !key.allowedModels.includes(model)) return error("model_not_allowed", "این مدل برای این کلید یا حساب مجاز نیست.", 403);
       if (user.settings[`model:${model}`] === false) return error("model_not_allowed", "این مدل برای این کلید یا حساب مجاز نیست.", 403);
     } else {
@@ -116,7 +103,7 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
 
     // 3. Reserve the worst-case cost (FEFO, row-locked) so concurrent calls cannot overdraw.
     const bound = live
-      ? (knownSandbox ? reservationBound(model, inputTokens, maxTokens) : liveReservationBound(inputTokens, maxTokens, synced?.multiplier ?? 1, settings.creditsPerCvcToken))
+      ? (knownSandbox ? reservationBound(model, inputTokens, maxTokens) : liveReservationBound(inputTokens, maxTokens, synced?.multiplier && synced.multiplier > 0 ? synced.multiplier : 1, settings.creditsPerCvcToken))
       : reservationBound(model, inputTokens, maxTokens);
     await reserve({ userId: user.id, keyId: key.id, requestId, model, amount: bound });
     reserved = true;

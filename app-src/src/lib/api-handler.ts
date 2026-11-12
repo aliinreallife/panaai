@@ -8,7 +8,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getUsageReport, exportUsage, reportOptions } from "@/lib/analytics";
 import { ApiError, PRICING, createSandbox, dataFor, isDemo, decryptImage, encryptImage, getUser, limit, requireUser, sandboxOnly, sha, verifier, pricingFor } from "@/lib/server";
-import { MODEL_CATALOG, ascii } from "@/lib/shared";
+import { ascii } from "@/lib/shared";
 import { systemSettings } from "@/lib/rules";
 import { logger } from "@/lib/logger";
 
@@ -160,7 +160,16 @@ export async function handler(req: NextRequest, context: Context) {
       return success(result);
     }
     if (req.method === "POST" && route === "keys") {
-      const input = z.object({ name: z.string().trim().min(2).max(50), budget: z.number().int().positive().max(1000000000000).nullable().optional(), rateLimit: z.number().int().min(1).max(300), allowedModels: z.array(z.enum(MODEL_CATALOG.map(m => m.id) as [string, ...string[]])).max(4) }).parse(await json(req));
+      const input = z.object({
+        name: z.string().trim().min(2).max(50),
+        budget: z.number().int().positive().max(1000000000000).nullable().optional(),
+        rateLimit: z.number().int().min(1).max(300),
+        allowedModels: z.array(z.string().trim().min(1).max(120).regex(/^[\w./:-]+$/)).max(50),
+      }).parse(await json(req));
+      const { resolveModelCatalog } = await import("@/lib/models");
+      const catalog = await resolveModelCatalog(user.settings);
+      const allowedIds = new Set(catalog.map(m => m.id));
+      if (input.allowedModels.some(id => !allowedIds.has(id))) throw new ApiError("model_disabled", "یکی از مدل‌های انتخاب‌شده در فهرست فعال نیست.");
       const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const created = await db.transaction(async tx => {
