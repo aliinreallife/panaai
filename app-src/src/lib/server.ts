@@ -131,7 +131,8 @@ async function seedDemoWorkspace(tx: Tx, userId: string) {
   }
   const sampleNames = ["پروژه اصلی", "محیط توسعه", "دستیار شخصی"];
   for (let i = 0; i < 3; i++) {
-    await tx.insert(s.keys).values({ userId, name: sampleNames[i], prefix: `pana-${randomBytes(5).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 5000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
+    // Soft allocation: keep seed budgets within remaining wallet so unallocated stays usable in demos/tests.
+    await tx.insert(s.keys).values({ userId, name: sampleNames[i], prefix: `pana-${randomBytes(5).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 2000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
   }
   const weights = [12, 16, 14, 17, 13, 28, 32, 30, 34, 29, 19, 20, 18, 24, 21, 30, 34, 36, 33, 39, 38, 41, 44, 40, 46, 29, 32, 28, 35, 31];
   const total = weights.reduce((a, b) => a + b, 0);

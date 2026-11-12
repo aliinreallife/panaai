@@ -38,15 +38,21 @@ assert.equal(afterBurst.wallet.available, before.wallet.available - charged); as
 pass(`30 concurrent requests: ${ok.length} settled, ${refused.length} refused, key budget never exceeded`);
 
 // ---- Wallet cannot be overdrawn by concurrent requests
-// Free the prior key's soft allocation so an uncapped key can use the remaining wallet.
-const revokedBudgetKey = await api(`keys/${key.data.id}/revoke`, undefined, 'POST'); assert.equal(revokedBudgetKey.status, 200);
-const drain = await api('admin/wallet/adjust', { amount: -(afterBurst.wallet.available - 100000), reason }); assert.equal(drain.status, 200, JSON.stringify(drain.data));
+// Clear every soft earmark (test key + seeded budgeted keys) so the uncapped key owns the free pool.
+for (const row of afterBurst.keys.filter(k => k.enabled && k.budget != null)) {
+  const revoked = await api(`keys/${row.id}/revoke`, undefined, 'POST');
+  assert.equal(revoked.status, 200, JSON.stringify(revoked.data));
+}
+const afterRevoke = (await api('data')).data;
+assert.equal(afterRevoke.wallet.allocated, 0, JSON.stringify(afterRevoke.wallet));
+const drain = await api('admin/wallet/adjust', { amount: -(afterRevoke.wallet.available - 100000), reason }); assert.equal(drain.status, 200, JSON.stringify(drain.data));
 const key2 = await api('keys', { name: 'Overdraw key', budget: null, rateLimit: 300, allowedModels: [] });
 assert.equal(key2.status, 201, JSON.stringify(key2.data));
 const auth2 = { authorization: `Bearer ${key2.data.secret}` };
 const burst2 = await Promise.all(Array.from({ length: 20 }, (_, i) => call(null, '/v1/chat/completions', { model: 'gpt-4o', max_tokens: 200, messages: [{ role: 'user', content: `overdraw ${i}` }] }, 'POST', auth2)));
 const ok2 = burst2.filter(r => r.status === 200);
 const refused2 = burst2.filter(r => r.status !== 200);
+assert.ok(ok2.length > 0, JSON.stringify(burst2.map(r => ({ status: r.status, code: r.data?.error?.code }))));
 assert.ok(refused2.every(r =>
   (r.status === 402 && r.data.error?.code === 'insufficient_credits')
   || (r.status === 403 && r.data.error?.code === 'unallocated_exceeded')
