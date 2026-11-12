@@ -219,14 +219,18 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     db.select().from(s.tickets).where(own(s.tickets.userId)).orderBy(desc(s.tickets.createdAt)),
   ]);
   const eligible = lotRows.filter(l => l.expiresAt > new Date() && l.remaining > 0);
+  // Live admins see real customers only — exclude sandbox/demo seeded workspaces from the queue & sales totals.
   const adminOrders = isOperator(user.role)
-    ? await db.select({
-        id: s.orders.id, reference: s.orders.reference, amountIrr: s.orders.amountIrr, credits: s.orders.credits, rateIrr: s.orders.rateIrr,
-        state: s.orders.state, claimedIrr: s.orders.claimedIrr, transferredAt: s.orders.transferredAt, bankReference: s.orders.bankReference,
-        customerNote: s.orders.customerNote, reviewNote: s.orders.reviewNote, transferDeadline: s.orders.transferDeadline,
-        createdAt: s.orders.createdAt, approvedAt: s.orders.approvedAt,
-        customerName: s.users.name, customerPhone: s.users.phone,
-      }).from(s.orders).innerJoin(s.users, eq(s.orders.userId, s.users.id)).orderBy(desc(s.orders.createdAt)).limit(200)
+    ? await (() => {
+        const q = db.select({
+          id: s.orders.id, reference: s.orders.reference, amountIrr: s.orders.amountIrr, credits: s.orders.credits, rateIrr: s.orders.rateIrr,
+          state: s.orders.state, claimedIrr: s.orders.claimedIrr, transferredAt: s.orders.transferredAt, bankReference: s.orders.bankReference,
+          customerNote: s.orders.customerNote, reviewNote: s.orders.reviewNote, transferDeadline: s.orders.transferDeadline,
+          createdAt: s.orders.createdAt, approvedAt: s.orders.approvedAt,
+          customerName: s.users.name, customerPhone: s.users.phone,
+        }).from(s.orders).innerJoin(s.users, eq(s.orders.userId, s.users.id));
+        return (isDemo ? q : q.where(eq(s.users.demo, false))).orderBy(desc(s.orders.createdAt)).limit(200);
+      })()
     : undefined;
   return { user: { id: user.id, name: user.name, demo: user.demo, phone: user.phone ?? null, createdAt: user.createdAt, settings: user.settings }, analytics, keys: keyRows, orders: orderRows, lots: lotRows, events: eventRows, daily: analytics.daily, usage: usageRows, audit: auditRows.filter(a => isOperator(user.role) || CUSTOMER_AUDIT.test(a.action)).map(a => ({ ...a, details: a.action.startsWith("payment.") ? { from: a.details.from, to: a.details.to, reasonCode: a.details.reasonCode, customerMessage: a.details.customerMessage } : {} })), tickets: ticketRows,
     wallet: { available: eligible.reduce((a,l) => a+l.remaining-l.reserved,0), reserved: eligible.reduce((a,l) => a+l.reserved,0), expiring7: eligible.filter(l => l.expiresAt < future(7)).reduce((a,l) => a+l.remaining,0), expiring: eligible.filter(l => l.expiresAt < future(30)).reduce((a,l) => a+l.remaining,0), nearestExpiry: eligible[0]?.expiresAt ?? null },
