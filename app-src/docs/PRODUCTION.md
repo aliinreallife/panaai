@@ -20,7 +20,7 @@ because SMS login, bank payments and the upstream API are not connected. The app
 
 These are business integrations and decisions. Each one needs an account, a contract or a credential that only you can provide.
 
-1. **Real login.** An Iranian SMS provider (for example Kavenegar or SMS.ir) for OTP codes, plus a real sign-up flow that creates `demo = false` users with role `customer`. Today the only way into the app is an anonymous sandbox workspace.
+1. **Real login.** Kavenegar Verify Lookup is wired (`KAVENEGAR_API_KEY` + `KAVENEGAR_OTP_TEMPLATE`); set both and create the template with `%token` in the Kavenegar panel. Still needed: a real sign-up flow that creates `demo = false` users with role `customer`. Today the primary path is an anonymous sandbox workspace.
 2. **Staff accounts.** A way to create real `owner`/`finance`/`support` users (seed script or invite flow) with SMS OTP + TOTP. Today staff roles only exist in sandbox workspaces with `SANDBOX_OPERATOR_ACCESS=true`.
 3. **Payments.** The verified destination bank account/card shown to customers, a statement reconciliation process (or an IPG such as ZarinPal/IDPay with webhook verification), and approved refund and transfer-deadline terms.
 4. **Upstream API.** The written reseller agreement; `CVC_BASE_URL` + `CVC_PRIMARY_API_KEY`. Balance/models sync and non-streaming live dispatch are implemented (`CVC_LIVE_DISPATCH=true` or `PLATFORM_MODE=live`). Confirm `creditsPerCvcToken` (admin → system settings) against real invoices. Streaming and deeper crash reconciliation against CVC usage logs are still open.

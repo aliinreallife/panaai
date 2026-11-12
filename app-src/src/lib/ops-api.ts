@@ -65,6 +65,10 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
 
   /* ---- security / MFA ---- */
   if (route === "admin/security" && m === "GET") return ok(await securityStatus(user));
+  if (route === "admin/sms" && m === "GET") {
+    const { readSmsOtpStats } = await import("@/lib/sms-metrics");
+    return ok(await readSmsOtpStats());
+  }
   if (route === "admin/mfa/enroll" && m === "POST") return ok(await enrollMfa(user));
   if (route === "admin/mfa/confirm" && m === "POST") { await confirmMfa(user, z.object({ code: z.string().regex(/^\d{6}$/) }).parse(await body()).code); return ok(); }
   if (route === "admin/mfa/elevate" && m === "POST") return ok({ elevatedUntil: (await elevate(user, z.object({ code: z.string().regex(/^\d{6}$/) }).parse(await body()).code)).toISOString() });

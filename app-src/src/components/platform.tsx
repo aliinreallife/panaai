@@ -154,8 +154,22 @@ function StatusModal({ onClose }: { onClose: () => void }) {
   </Modal>;
 }
 function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [phone, setPhone] = useState(""); const [code, setCode] = useState(""); const [challenge, setChallenge] = useState<{ challengeId: string; demoCode: string } | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [remaining, setRemaining] = useState(0);
+  const [phone, setPhone] = useState(""); const [code, setCode] = useState(""); const [challenge, setChallenge] = useState<{ challengeId: string; demo?: boolean; demoCode?: string; message?: string } | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [remaining, setRemaining] = useState(0);
   useEffect(() => { if (remaining <= 0) return; const timer = setTimeout(() => setRemaining(remaining - 1), 1000); return () => clearTimeout(timer); }, [remaining]);
-  const submit = async (e: React.FormEvent) => { e.preventDefault(); setBusy(true); setError(""); try { if (!challenge) { const result = await api<{ challengeId: string; demoCode: string }>("auth/otp/request", { body: { phone: ascii(phone) } }); setChallenge(result); setRemaining(120); } else { await api("auth/otp/verify", { body: { challengeId: challenge.challengeId, code: ascii(code) } }); onSuccess(); } } catch (e) { const wait = (e as ApiFailure).retryAfter; setError(wait ? `${(e as Error).message} امکان تلاش دوباره تا ${fa(wait)} ثانیه دیگر.` : (e as Error).message); } finally { setBusy(false); } };
-  return <Modal title="ورود با شماره موبایل" description="پیش‌نمایش مسیر ورود امن با کد یک‌بارمصرف" onClose={onClose}><Notice tone="warning">در محیط آزمایشی پیامکی ارسال نمی‌شود و کد آزمایشی همین‌جا نمایش داده می‌شود.</Notice><form onSubmit={submit} className="form-stack"><label className="field">شماره موبایل<input dir="ltr" placeholder="0912 345 6789" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} required disabled={!!challenge} /></label>{challenge && <><div className="demo-otp">کد آزمایشی: <strong dir="ltr">{challenge.demoCode}</strong><span>{fa(remaining)} ثانیه</span></div><label className="field">کد تأیید<input dir="ltr" inputMode="numeric" placeholder="------" value={code} maxLength={6} onChange={e => setCode(e.target.value)} required /></label></>}{error && <div className="form-error" role="alert">{error}</div>}<Button busy={busy} className="full-width" type="submit">{challenge ? "تأیید کد و ادامه" : "دریافت کد آزمایشی"}<Icon name="left" size={16} /></Button>{challenge && remaining <= 60 && <Button type="button" tone="ghost" onClick={() => { setChallenge(null); setCode(""); }}>دریافت کد جدید</Button>}<p className="form-caption">کد ۲ دقیقه معتبر است و فقط یک‌بار قابل استفاده خواهد بود.</p></form></Modal>;
+  const submit = async (e: React.FormEvent) => { e.preventDefault(); setBusy(true); setError(""); try { if (!challenge) { const result = await api<{ challengeId: string; demo?: boolean; demoCode?: string; message?: string; expiresIn?: number }>("auth/otp/request", { body: { phone: ascii(phone) } }); setChallenge(result); setRemaining(result.expiresIn || 120); } else { await api("auth/otp/verify", { body: { challengeId: challenge.challengeId, code: ascii(code) } }); onSuccess(); } } catch (e) { const wait = (e as ApiFailure).retryAfter; setError(wait ? `${(e as Error).message} امکان تلاش دوباره تا ${fa(wait)} ثانیه دیگر.` : (e as Error).message); } finally { setBusy(false); } };
+  return <Modal title="ورود با شماره موبایل" description="ورود امن با کد یک‌بارمصرف پیامکی" onClose={onClose}>
+    <Notice tone={challenge && challenge.demo === false ? "success" : "warning"}>{challenge?.message || "اگر کلید کاوه‌نگار تنظیم شده باشد پیامک واقعی ارسال می‌شود؛ وگرنه کد آزمایشی همین‌جا نمایش داده می‌شود."}</Notice>
+    <form onSubmit={submit} className="form-stack">
+      <label className="field">شماره موبایل<input dir="ltr" placeholder="0912 345 6789" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} required disabled={!!challenge} /></label>
+      {challenge && <>
+        {challenge.demo && challenge.demoCode && <div className="demo-otp">کد آزمایشی: <strong dir="ltr">{challenge.demoCode}</strong><span>{fa(remaining)} ثانیه</span></div>}
+        {!challenge.demo && <div className="demo-otp"><span>کد پیامکی ارسال شد</span><span>{fa(remaining)} ثانیه</span></div>}
+        <label className="field">کد تأیید<input dir="ltr" inputMode="numeric" placeholder="------" value={code} maxLength={6} onChange={e => setCode(e.target.value)} required /></label>
+      </>}
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <Button busy={busy} className="full-width" type="submit">{challenge ? "تأیید کد و ادامه" : "دریافت کد"}<Icon name="left" size={16} /></Button>
+      {challenge && remaining <= 60 && <Button type="button" tone="ghost" onClick={() => { setChallenge(null); setCode(""); }}>دریافت کد جدید</Button>}
+      <p className="form-caption">کد ۲ دقیقه معتبر است و فقط یک‌بار قابل استفاده خواهد بود.</p>
+    </form>
+  </Modal>;
 }

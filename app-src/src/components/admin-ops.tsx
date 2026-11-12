@@ -60,7 +60,7 @@ function ElevationModal({ onClose }: { onClose: () => void }) {
   const showDemo = () => run(async () => setDemo(await api<{ code: string; expiresIn: number }>("admin/mfa/demo-code")));
   return <Modal title="تأیید هویت مدیر" description="ورود مدیر = کد پیامکی + کد TOTP؛ اعتبار نشست ۱۵ دقیقه" onClose={onClose}>
     <ol className="mfa-steps">
-      <li className={step > 1 ? "done" : "current"}><strong>۱. کد پیامکی (OTP)</strong><span>{security.otpVerified ? "شماره موبایل با کد یک‌بارمصرف تأیید شده است." : "ابتدا از منوی حساب، «آزمایش ورود با موبایل» را انجام دهید. پیامک واقعی ارسال نمی‌شود."}</span></li>
+      <li className={step > 1 ? "done" : "current"}><strong>۱. کد پیامکی (OTP)</strong><span>{security.otpVerified ? "شماره موبایل با کد یک‌بارمصرف تأیید شده است." : "ابتدا از منوی حساب، ورود با موبایل را انجام دهید. با پیکربندی کاوه‌نگار پیامک واقعی ارسال می‌شود."}</span></li>
       <li className={step > 2 ? "done" : step === 2 ? "current" : ""}><strong>۲. فعال‌سازی TOTP</strong><span>{security.mfaEnrolled ? "برنامه احراز هویت متصل است." : "کلید را در Google Authenticator، Authy یا هر برنامه TOTP وارد کنید."}</span></li>
       <li className={step === 3 ? "current" : ""}><strong>۳. کد TOTP فعلی</strong><span>هر کد فقط یک‌بار پذیرفته می‌شود؛ پنج تلاش ناموفق TOTP را قفل می‌کند.</span></li>
     </ol>
