@@ -279,11 +279,41 @@ export async function handler(req: NextRequest, context: Context) {
       await limit(`otp:${user.id}`, 1, 60000);
       const { phone } = z.object({ phone: z.string().regex(/^09\d{9}$/) }).parse(await json(req));
       const code = String(randomInt(100000, 1000000));
+      const { kavenegarConfigured, sendLookupOtp } = await import("@/lib/kavenegar");
+      const { recordSmsSend } = await import("@/lib/sms-metrics");
+      const liveSms = kavenegarConfigured();
+      let delivery: { messageId?: string; costRial: number } = { costRial: 0 };
+      if (liveSms) {
+        try {
+          const sent = await sendLookupOtp(phone, code);
+          delivery = { messageId: sent.messageId, costRial: sent.costRial };
+          await recordSmsSend({ ok: true, costRial: sent.costRial });
+        } catch (error) {
+          await recordSmsSend({ ok: false, error: error instanceof ApiError ? error.message : "ارسال ناموفق" });
+          throw error;
+        }
+      } else {
+        await recordSmsSend({ ok: true, costRial: 0 });
+      }
       const [challenge] = await db.insert(s.otpChallenges).values({ userId: user.id, phone, codeHash: await verifier(code), expiresAt: new Date(Date.now() + 120000) }).returning({ id: s.otpChallenges.id });
-      return success({ challengeId: challenge.id, demoCode: code, demo: true, message: "پیامکی ارسال نشده است؛ این کد فقط برای ورود در محیط آزمایشی است." });
+      await db.insert(s.audit).values({
+        userId: user.id,
+        action: liveSms ? "auth.otp_sent" : "auth.otp_demo_issued",
+        targetId: challenge.id,
+        details: { provider: liveSms ? "kavenegar" : "demo", messageId: delivery.messageId || null, costRial: delivery.costRial },
+      });
+      return success({
+        challengeId: challenge.id,
+        demo: !liveSms,
+        demoCode: liveSms ? undefined : code,
+        expiresIn: 120,
+        message: liveSms ? "کد تأیید به شماره شما ارسال شد." : "پیامکی ارسال نشده است؛ این کد فقط برای ورود در محیط آزمایشی است.",
+      });
     }
     if (route === "auth/otp/verify" && req.method === "POST") {
       const input = z.object({ challengeId: uuid, code: z.string().regex(/^\d{6}$/) }).parse(await json(req));
+      const { kavenegarConfigured } = await import("@/lib/kavenegar");
+      const liveSms = kavenegarConfigured();
       const result = await db.transaction(async tx => {
         const [challenge] = await tx.select().from(s.otpChallenges).where(and(eq(s.otpChallenges.id, input.challengeId), eq(s.otpChallenges.userId, user.id))).for("update");
         if (!challenge || challenge.usedAt || challenge.expiresAt < new Date() || challenge.attempts >= 5) return false;
@@ -291,11 +321,13 @@ export async function handler(req: NextRequest, context: Context) {
         if (challenge.codeHash !== await verifier(input.code)) return false;
         await tx.update(s.otpChallenges).set({ usedAt: new Date() }).where(eq(s.otpChallenges.id, challenge.id));
         await tx.update(s.users).set({ phone: challenge.phone }).where(eq(s.users.id, user.id));
-        await tx.insert(s.audit).values({ userId: user.id, action: "auth.demo_verified", details: { realSms: false } });
+        await tx.insert(s.audit).values({ userId: user.id, action: liveSms ? "auth.otp_verified" : "auth.demo_verified", details: { realSms: liveSms } });
         return true;
       });
       if (!result) throw new ApiError("invalid_otp", "کد نادرست، استفاده‌شده یا منقضی است.");
-      return success({ ok: true, demo: true });
+      const { recordSmsVerified } = await import("@/lib/sms-metrics");
+      await recordSmsVerified();
+      return success({ ok: true, demo: !liveSms });
     }
     const { customerOps } = await import("@/lib/ops-api");
     const handled = await customerOps(req, user, route, () => json(req));
