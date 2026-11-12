@@ -112,7 +112,11 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     // 4. Dispatch: sandbox simulator, or live upstream proxy when enabled.
     // Each customer wallet gets its own delegated upstream key — never one shared platform key.
     if (live) {
-      const upstreamCred = await ensureUserUpstreamKey(user);
+      const upstreamCred = await ensureUserUpstreamKey(user, {
+        budgetCredits: key.budget,
+        platformKeyId: key.id,
+        reason: "first_use",
+      });
       const upstream = await proxyCvcJson(path as "chat/completions" | "responses", { ...body, stream: false }, { runtimeKey: upstreamCred.key });
       if (!upstream.ok) {
         await release(requestId);

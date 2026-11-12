@@ -244,6 +244,7 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
       creditsPerCvcToken: int("creditsPerCvcToken").default(SYSTEM_DEFAULTS.creditsPerCvcToken),
       creditsPerUsd: int("creditsPerUsd").default(SYSTEM_DEFAULTS.creditsPerUsd),
       upstreamTokensPerUsd: int("upstreamTokensPerUsd").default(SYSTEM_DEFAULTS.upstreamTokensPerUsd),
+      cvcDelegatedTokenCap: int("cvcDelegatedTokenCap").default(SYSTEM_DEFAULTS.cvcDelegatedTokenCap),
       reason,
     }).parse(await body());
     const { reason: why, ...values } = input;

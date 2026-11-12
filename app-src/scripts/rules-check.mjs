@@ -40,4 +40,7 @@ pass('Persian digit grouping, digit normalization and inline range errors');
 assert.deepEqual(r.refundable({ amountIrr: 900000, credits: 20000000 }, { remaining: 10000000, reserved: 0, expiresAt: new Date('2027-01-01') }, now), { credits: 10000000, amountIrr: 450000 });
 assert.deepEqual(r.refundable({ amountIrr: 900000, credits: 20000000 }, { remaining: 10000000, reserved: 0, expiresAt: new Date('2025-01-01') }, now), { credits: 0, amountIrr: 0 });
 assert.deepEqual(r.systemSettings({ 'system:transferHours': '999' }), r.SYSTEM_DEFAULTS);
-pass('refund proration and bounded system settings');
+assert.equal(r.resolveCvcTokenLimit(null, r.SYSTEM_DEFAULTS), r.SYSTEM_DEFAULTS.cvcDelegatedTokenCap);
+assert.equal(r.resolveCvcTokenLimit(1_000_000, r.SYSTEM_DEFAULTS), 1_000_000);
+assert.equal(r.resolveCvcTokenLimit(1e15, r.SYSTEM_DEFAULTS), r.SYSTEM_DEFAULTS.cvcDelegatedTokenCap);
+pass('refund proration, bounded system settings, and capped CVC token limits');

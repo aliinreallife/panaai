@@ -28,13 +28,14 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 ## Architecture (MVP)
 
 1. Customers buy **PanaAI internal credits**; FEFO lots, limits, unused balance and platform API keys stay local.
-2. Creating (or rotating) a PanaAI platform API key in live mode **always mints a fresh** delegated CVC upstream key (so a new row appears in the CVC keys UI) and stores it encrypted in `platform_upstream_credentials`. The gateway uses the wallet’s latest credential on `/v1` chat; it mints on first use only if create-time provisioning was skipped (e.g. no `CVC_PRIMARY_API_KEY`).
+2. Creating a PanaAI platform API key in live mode **ensures one** delegated CVC upstream key per wallet (encrypted in `platform_upstream_credentials`). Mint always sets a finite `token_limit`: from the key budget when set, otherwise `system.cvcDelegatedTokenCap` (default 5M). **Never mint unlimited.** Rotate only replaces the PanaAI secret — it does not mint another CVC key. Gateway reuses the wallet credential; first-use mint happens only if create-time provisioning was skipped.
 3. `CVC_PRIMARY_API_KEY` is for **management** (mint delegated keys, catalog sync, platform balance/coverage). It is never used as the shared chat runtime key for all customers.
-4. `system.creditsPerUsd` (default 20M) is the customer purchase rate. `system.upstreamTokensPerUsd` (default 25M) is admin-only wholesale. `system.creditsPerCvcToken` (default 1) converts upstream `cost_tokens` into customer credits.
+4. `system.creditsPerUsd` (default 20M) is the customer purchase rate. `system.upstreamTokensPerUsd` (default 25M) is admin-only wholesale. `system.creditsPerCvcToken` (default 1) converts upstream `cost_tokens` into customer credits. `system.cvcDelegatedTokenCap` is the hard ceiling on every delegated CVC key.
 5. Streaming (`stream: true`) is rejected until SSE settlement is implemented.
 
 ## Still required for a full commercial launch
 
 1. Confirm live balance/meter on the reseller account and keep admin rates (`creditsPerUsd` / `upstreamTokensPerUsd`) aligned with invoices.
 2. Real SMS login, bank destination, and staff accounts (see `docs/PRODUCTION.md`).
-3. Optional: rotate/revoke delegated upstream keys from admin, streaming proxy, deeper crash reconciliation against `GET /v1/keys/logs`.
+3. **PRD D31:** wire PanaAI revoke → CVC `POST /v1/keys/edit` (`delete` / `active: false`), and optionally sync budget/model edits via the same endpoint. Until then, revoke is local-only.
+4. Optional: streaming proxy, deeper crash reconciliation against `GET /v1/keys/logs`.

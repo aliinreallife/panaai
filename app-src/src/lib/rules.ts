@@ -179,6 +179,8 @@ export const SYSTEM_DEFAULTS = {
   creditsPerCvcToken: 1,
   creditsPerUsd: 20_000_000,
   upstreamTokensPerUsd: 25_000_000,
+  /** Hard ceiling for every CVC delegated key mint. Never mint unlimited upstream keys. */
+  cvcDelegatedTokenCap: 5_000_000,
 };
 export const SYSTEM_LIMITS = {
   transferHours: [1, 72],
@@ -188,10 +190,11 @@ export const SYSTEM_LIMITS = {
   creditsPerCvcToken: [1, 1000],
   creditsPerUsd: [1_000_000, 100_000_000],
   upstreamTokensPerUsd: [1_000_000, 100_000_000],
+  cvcDelegatedTokenCap: [1_000, 100_000_000],
 } as const;
 export type SystemSettings = typeof SYSTEM_DEFAULTS;
 /** Fields customers may see in the app payload. Wholesale/upstream rates stay admin-only. */
-export type CustomerSystemSettings = Omit<SystemSettings, "upstreamTokensPerUsd" | "creditsPerCvcToken" | "creditsPerUsd">;
+export type CustomerSystemSettings = Omit<SystemSettings, "upstreamTokensPerUsd" | "creditsPerCvcToken" | "creditsPerUsd" | "cvcDelegatedTokenCap">;
 export function systemSettings(settings: Record<string, unknown>): SystemSettings {
   const read = (key: keyof SystemSettings) => {
     const value = Number(settings[`system:${key}`]);
@@ -206,7 +209,22 @@ export function systemSettings(settings: Record<string, unknown>): SystemSetting
     creditsPerCvcToken: read("creditsPerCvcToken"),
     creditsPerUsd: read("creditsPerUsd"),
     upstreamTokensPerUsd: read("upstreamTokensPerUsd"),
+    cvcDelegatedTokenCap: read("cvcDelegatedTokenCap"),
   };
+}
+
+/**
+ * Lifetime CVC `token_limit` for a delegated key.
+ * Uses the PanaAI key budget when set; otherwise the platform safety cap.
+ * Never returns null/unlimited — uncapped upstream keys are too risky.
+ */
+export function resolveCvcTokenLimit(budgetCredits: number | null | undefined, settings: SystemSettings): number {
+  const rate = Math.max(1, settings.creditsPerCvcToken);
+  const platformCap = Math.max(1, settings.cvcDelegatedTokenCap);
+  if (budgetCredits != null && Number.isFinite(budgetCredits) && budgetCredits > 0) {
+    return Math.max(1, Math.min(platformCap, Math.floor(budgetCredits / rate)));
+  }
+  return platformCap;
 }
 export function customerSystemSettings(settings: Record<string, unknown>): CustomerSystemSettings {
   const all = systemSettings(settings);

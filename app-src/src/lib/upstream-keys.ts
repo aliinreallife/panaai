@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { createDelegatedKey, cvcConfig } from "@/lib/cvc";
 import { ApiError, decryptImage, encryptImage } from "@/lib/server";
 import { logger } from "@/lib/logger";
+import { resolveCvcTokenLimit, systemSettings } from "@/lib/rules";
 
 type User = typeof s.users.$inferSelect;
 
@@ -51,48 +52,67 @@ async function readActive(userId: string) {
   return row ?? null;
 }
 
-type MintMeta = {
+type MintOpts = {
   platformKeyId?: string;
-  reason: "create" | "rotate" | "first_use";
+  reason: "create" | "first_use";
+  /** Required positive lifetime billed-token allowance — never mint unlimited. */
+  tokenLimit: number;
+  budgetCredits?: number | null;
 };
 
-async function callCvcMint(user: User, meta: MintMeta) {
+async function callCvcMint(user: User, opts: MintOpts) {
   const cfg = cvcConfig();
   if (!cfg.primaryKey) {
     throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
   }
-  const nameSeed = (meta.platformKeyId || user.id).replace(/-/g, "").slice(0, 16);
+  const tokenLimit = Math.max(1, Math.floor(opts.tokenLimit));
+  const nameSeed = (opts.platformKeyId || user.id).replace(/-/g, "").slice(0, 16);
   const minted = await createDelegatedKey({
     name: `pana-${nameSeed}`,
-    token_limit: null,
+    token_limit: tokenLimit,
   });
   if (!minted.ok) {
     logger.error("upstream_key.mint_failed", {
       userId: user.id,
-      platformKeyId: meta.platformKeyId ?? null,
-      reason: meta.reason,
+      platformKeyId: opts.platformKeyId ?? null,
+      reason: opts.reason,
+      tokenLimit,
       code: minted.code,
       source: minted.source,
     });
     throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
   }
-  return minted;
+  return { minted, tokenLimit };
 }
 
 /**
  * Return (and create if needed) the customer's dedicated upstream runtime key.
  * Never falls back to the shared platform key for customer traffic.
+ * Mint always sets a finite CVC token_limit (key budget or platform safety cap).
  */
-export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; prefix: string; created: boolean }> {
+export async function ensureUserUpstreamKey(
+  user: User,
+  opts: { budgetCredits?: number | null; platformKeyId?: string; reason?: "create" | "first_use" } = {},
+): Promise<{ key: string; prefix: string; created: boolean; tokenLimit: number | null }> {
   const existing = await readActive(user.id);
   if (existing) {
     try {
-      return { key: await decryptSecret(existing.encryptedSecret), prefix: existing.prefix, created: false };
+      const storedLimit = typeof existing.meta?.tokenLimit === "number" ? existing.meta.tokenLimit : null;
+      return {
+        key: await decryptSecret(existing.encryptedSecret),
+        prefix: existing.prefix,
+        created: false,
+        tokenLimit: storedLimit,
+      };
     } catch {
       logger.error("upstream_key.decrypt_failed", { userId: user.id, prefix: existing.prefix });
       throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
     }
   }
+
+  const settings = systemSettings(user.settings);
+  const tokenLimit = resolveCvcTokenLimit(opts.budgetCredits, settings);
+  const reason = opts.reason ?? "first_use";
 
   // Serialize provisioning per user so concurrent first requests do not mint many upstream keys.
   const provisioned = await db.transaction(async (tx) => {
@@ -101,9 +121,14 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
     const [again] = await tx.select().from(s.upstreamCredentials)
       .where(and(eq(s.upstreamCredentials.userId, user.id), isNull(s.upstreamCredentials.revokedAt)))
       .limit(1);
-    if (again) return { row: again, created: false as const };
+    if (again) return { row: again, created: false as const, tokenLimit };
 
-    const minted = await callCvcMint(user, { reason: "first_use" });
+    const { minted, tokenLimit: applied } = await callCvcMint(user, {
+      reason,
+      platformKeyId: opts.platformKeyId,
+      tokenLimit,
+      budgetCredits: opts.budgetCredits,
+    });
     const encryptedSecret = await encryptSecret(minted.data.key);
     const prefix = prefixOf(minted.data.key);
     const upstreamRef = typeof minted.data.meta.id === "string"
@@ -119,107 +144,34 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
       meta: {
         source: minted.source,
         mintedAt: new Date().toISOString(),
-        reason: "first_use",
+        reason,
+        tokenLimit: applied,
+        budgetCredits: opts.budgetCredits ?? null,
+        platformKeyId: opts.platformKeyId ?? null,
       },
     }).returning();
 
     await tx.insert(s.audit).values({
       userId: user.id,
       action: "upstream_key.provisioned",
-      targetId: user.id,
-      details: { prefix, upstreamRef, source: minted.source, reason: "first_use" },
+      targetId: opts.platformKeyId ?? user.id,
+      details: { prefix, upstreamRef, source: minted.source, reason, tokenLimit: applied },
     });
-    return { row, created: true as const };
+    logger.info("upstream_key.minted", {
+      userId: user.id,
+      reason,
+      prefix,
+      tokenLimit: applied,
+      budgetCredits: opts.budgetCredits ?? null,
+    });
+    return { row, created: true as const, tokenLimit: applied };
   });
 
   return {
     key: await decryptSecret(provisioned.row.encryptedSecret),
     prefix: provisioned.row.prefix,
     created: provisioned.created,
-  };
-}
-
-/**
- * Always mint a fresh CVC delegated key and replace the wallet's stored credential.
- * Used on every platform API key create/rotate so a new key appears in the CVC dashboard.
- */
-export async function remintUserUpstreamKey(
-  user: User,
-  opts: { platformKeyId?: string; reason: "create" | "rotate" },
-): Promise<{ key: string; prefix: string; created: true }> {
-  const minted = await callCvcMint(user, { platformKeyId: opts.platformKeyId, reason: opts.reason });
-  const encryptedSecret = await encryptSecret(minted.data.key);
-  const prefix = prefixOf(minted.data.key);
-  const upstreamRef = typeof minted.data.meta.id === "string"
-    ? minted.data.meta.id
-    : typeof minted.data.meta.key_id === "string"
-      ? minted.data.meta.key_id
-      : null;
-  const meta = {
-    source: minted.source,
-    mintedAt: new Date().toISOString(),
-    reason: opts.reason,
-    platformKeyId: opts.platformKeyId ?? null,
-  };
-
-  const row = await db.transaction(async (tx) => {
-    await tx.select().from(s.users).where(eq(s.users.id, user.id)).for("update");
-    await ensureUpstreamTable();
-    const [existing] = await tx.select().from(s.upstreamCredentials)
-      .where(eq(s.upstreamCredentials.userId, user.id))
-      .limit(1);
-
-    if (existing) {
-      const [updated] = await tx.update(s.upstreamCredentials).set({
-        encryptedSecret,
-        prefix,
-        upstreamRef,
-        meta,
-        rotatedAt: new Date(),
-        revokedAt: null,
-      }).where(eq(s.upstreamCredentials.userId, user.id)).returning();
-      await tx.insert(s.audit).values({
-        userId: user.id,
-        action: "upstream_key.reminted",
-        targetId: opts.platformKeyId ?? user.id,
-        details: {
-          prefix,
-          upstreamRef,
-          source: minted.source,
-          previousPrefix: existing.prefix,
-          reason: opts.reason,
-        },
-      });
-      return updated;
-    }
-
-    const [inserted] = await tx.insert(s.upstreamCredentials).values({
-      userId: user.id,
-      encryptedSecret,
-      prefix,
-      upstreamRef,
-      meta,
-    }).returning();
-    await tx.insert(s.audit).values({
-      userId: user.id,
-      action: "upstream_key.provisioned",
-      targetId: opts.platformKeyId ?? user.id,
-      details: { prefix, upstreamRef, source: minted.source, reason: opts.reason },
-    });
-    return inserted;
-  });
-
-  logger.info("upstream_key.reminted", {
-    userId: user.id,
-    platformKeyId: opts.platformKeyId ?? null,
-    reason: opts.reason,
-    prefix: row.prefix,
-  });
-
-  return {
-    key: await decryptSecret(row.encryptedSecret),
-    prefix: row.prefix,
-    created: true,
+    tokenLimit: provisioned.tokenLimit,
   };
 }
 
@@ -230,6 +182,7 @@ export async function upstreamKeyStatus(userId: string) {
     provisioned: true as const,
     prefix: row.prefix,
     upstreamRef: row.upstreamRef,
+    tokenLimit: typeof row.meta?.tokenLimit === "number" ? row.meta.tokenLimit : null,
     createdAt: row.createdAt.toISOString(),
     rotatedAt: row.rotatedAt?.toISOString() ?? null,
   };
