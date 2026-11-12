@@ -9,6 +9,10 @@ assert.equal(c.cvcModelsUrl({ baseUrl: "https://cheapvibecode.ru", primaryKey: n
 assert.equal(c.cvcBalanceConfigured({ baseUrl: "x", primaryKey: null, runtimeKey: null, legacyBalanceUrl: null, legacyApiKey: null }), false);
 assert.equal(c.cvcBalanceConfigured({ baseUrl: "x", primaryKey: "p", runtimeKey: "r", legacyBalanceUrl: null, legacyApiKey: null }), true);
 assert.equal(c.cvcBalanceConfigured({ baseUrl: "x", primaryKey: null, runtimeKey: null, legacyBalanceUrl: "https://example.test/bal", legacyApiKey: "k" }), true);
+const primaryOnly = c.cvcConfig({ CVC_PRIMARY_API_KEY: "sk-cvc-primary-only" });
+assert.equal(primaryOnly.primaryKey, "sk-cvc-primary-only");
+assert.equal(primaryOnly.runtimeKey, "sk-cvc-primary-only");
+assert.equal(c.cvcBalanceConfigured(primaryOnly), true);
 pass("CVC URL and config helpers");
 
 assert.equal(c.parseCvcBalance({ balance: 1250000 }), 1250000);

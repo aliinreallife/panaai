@@ -22,13 +22,13 @@ const schema = z.object({
   ALERT_EMAIL_FROM: z.string().min(3).optional(),
   /** Reseller API origin without trailing /v1. Default in client: https://ru.cheapvibecode.ru */
   CVC_BASE_URL: z.string().url().optional(),
-  /** PRIMARY / control-plane key. Server only. Never sent to browsers or customers. */
+  /** CVC reseller key (management + catalog + balance + runtime). Server only. */
   CVC_PRIMARY_API_KEY: z.string().min(8).optional(),
-  /** Delegated runtime key used for balance, models and (later) live dispatch. */
+  /** Optional override if you later split a dedicated runtime key from primary. */
   CVC_RUNTIME_API_KEY: z.string().min(8).optional(),
-  /** Legacy: full balance URL. Prefer CVC_BASE_URL + CVC_RUNTIME_API_KEY. */
+  /** Legacy: full balance URL. Prefer CVC_BASE_URL + CVC_PRIMARY_API_KEY. */
   CVC_BALANCE_URL: z.string().url().optional(),
-  /** Legacy alias for CVC_RUNTIME_API_KEY when used with CVC_BALANCE_URL. */
+  /** Legacy key alias when used with CVC_BALANCE_URL. */
   CVC_API_KEY: z.string().min(8).optional(),
   VERCEL: z.string().optional(),
 }).superRefine((env, ctx) => {
@@ -37,10 +37,8 @@ const schema = z.object({
     ctx.addIssue({ code: "custom", path: ["RECEIPT_ENCRYPTION_KEY"], message: "is required on Vercel and in live mode" });
   if (!!env.RESEND_API_KEY !== !!env.ALERT_EMAIL_FROM)
     ctx.addIssue({ code: "custom", path: ["ALERT_EMAIL_FROM"], message: "RESEND_API_KEY and ALERT_EMAIL_FROM must be set together" });
-  if (env.CVC_BALANCE_URL && !env.CVC_API_KEY && !env.CVC_RUNTIME_API_KEY)
-    ctx.addIssue({ code: "custom", path: ["CVC_API_KEY"], message: "CVC_BALANCE_URL requires CVC_API_KEY or CVC_RUNTIME_API_KEY" });
-  if (env.CVC_PRIMARY_API_KEY && !env.CVC_RUNTIME_API_KEY && !env.CVC_API_KEY)
-    ctx.addIssue({ code: "custom", path: ["CVC_RUNTIME_API_KEY"], message: "set a delegated runtime key for balance/models; primary alone is not enough" });
+  if (env.CVC_BALANCE_URL && !env.CVC_API_KEY && !env.CVC_RUNTIME_API_KEY && !env.CVC_PRIMARY_API_KEY)
+    ctx.addIssue({ code: "custom", path: ["CVC_API_KEY"], message: "CVC_BALANCE_URL requires CVC_PRIMARY_API_KEY, CVC_RUNTIME_API_KEY, or CVC_API_KEY" });
   if (env.PLATFORM_MODE === "live" && env.SANDBOX_OPERATOR_ACCESS === "true")
     ctx.addIssue({ code: "custom", path: ["SANDBOX_OPERATOR_ACCESS"], message: "must not be enabled in live mode" });
 });
@@ -70,8 +68,7 @@ export function launchWarnings(env: ServerEnv) {
   const warnings: string[] = [];
   if (env.PLATFORM_MODE === "sandbox" && env.NODE_ENV === "production") warnings.push("PLATFORM_MODE=sandbox: anonymous sandbox workspaces with sample data are served. Use PLATFORM_MODE=live for the real launch.");
   if (env.SANDBOX_OPERATOR_ACCESS === "true") warnings.push("SANDBOX_OPERATOR_ACCESS=true: every new sandbox workspace gets the admin console. Internal previews only.");
-  const hasBalance = !!(env.CVC_RUNTIME_API_KEY || env.CVC_API_KEY || env.CVC_BALANCE_URL);
+  const hasBalance = !!(env.CVC_PRIMARY_API_KEY || env.CVC_RUNTIME_API_KEY || env.CVC_API_KEY || env.CVC_BALANCE_URL);
   if (env.PLATFORM_MODE === "live" && !hasBalance) warnings.push("Live mode without an upstream balance source: the API stays closed (service_unavailable).");
-  if (env.CVC_RUNTIME_API_KEY && !env.CVC_PRIMARY_API_KEY) warnings.push("CVC_RUNTIME_API_KEY is set without CVC_PRIMARY_API_KEY: balance/models work, but reseller key create/edit/transfer stays unavailable.");
   return warnings;
 }

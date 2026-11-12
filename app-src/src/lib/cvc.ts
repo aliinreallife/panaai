@@ -3,9 +3,9 @@
  *
  * Architecture for this MVP:
  * - PanaAI keeps its own customer wallet, FEFO lots and platform API keys.
- * - One platform CVC runtime key (CUSTOMER_API_KEY) is used for balance, models
- *   and (later) live dispatch. PRIMARY_API_KEY stays server-side for control-plane
- *   operations (create/edit/transfer delegated keys) and is never shown to customers.
+ * - One platform CVC key (`CVC_PRIMARY_API_KEY`) is enough: it can manage keys
+ *   and call balance/models/runtime. An optional `CVC_RUNTIME_API_KEY` may
+ *   override the key used for balance/models/dispatch if you later split roles.
  * - Live inference stays fail-closed until dispatch is explicitly enabled and
  *   metering against CVC `cost_tokens` is verified.
  *
@@ -17,6 +17,7 @@ export const CVC_DEFAULT_BASE_URL = "https://ru.cheapvibecode.ru";
 export type CvcConfig = {
   baseUrl: string;
   primaryKey: string | null;
+  /** Key used for balance/models/runtime (primary unless a runtime override is set). */
   runtimeKey: string | null;
   /** Legacy override: full URL used instead of `${baseUrl}/v1/balance`. */
   legacyBalanceUrl: string | null;
@@ -26,16 +27,18 @@ export type CvcConfig = {
 export function cvcConfig(env: NodeJS.ProcessEnv = process.env): CvcConfig {
   const trim = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
   const base = trim(env.CVC_BASE_URL) ?? CVC_DEFAULT_BASE_URL;
+  const primaryKey = trim(env.CVC_PRIMARY_API_KEY);
   return {
     baseUrl: base.replace(/\/+$/, ""),
-    primaryKey: trim(env.CVC_PRIMARY_API_KEY),
-    runtimeKey: trim(env.CVC_RUNTIME_API_KEY) ?? trim(env.CVC_API_KEY),
+    primaryKey,
+    // One key is enough: primary covers catalog, balance and management.
+    runtimeKey: trim(env.CVC_RUNTIME_API_KEY) ?? trim(env.CVC_API_KEY) ?? primaryKey,
     legacyBalanceUrl: trim(env.CVC_BALANCE_URL),
-    legacyApiKey: trim(env.CVC_API_KEY),
+    legacyApiKey: trim(env.CVC_API_KEY) ?? primaryKey,
   };
 }
 
-/** True when a live balance source can be called (runtime key, or legacy URL+key). */
+/** True when a live balance source can be called. */
 export function cvcBalanceConfigured(cfg: CvcConfig = cvcConfig()): boolean {
   if (cfg.legacyBalanceUrl && cfg.legacyApiKey) return true;
   return !!cfg.runtimeKey;

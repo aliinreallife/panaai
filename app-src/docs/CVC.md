@@ -7,12 +7,12 @@ PanaAI sits in front of CheapVibeCode (CVC). Customers never see CVC names, bala
 | Env | Role |
 |---|---|
 | `CVC_BASE_URL` | API origin **without** `/v1` (default `https://ru.cheapvibecode.ru`) |
-| `CVC_PRIMARY_API_KEY` | Reseller control plane: create/edit/transfer/delete delegated keys |
-| `CVC_RUNTIME_API_KEY` | Delegated customer key: balance, models, runtime inference |
+| `CVC_PRIMARY_API_KEY` | **One key is enough** — management, catalog (`/v1/models`), balance and runtime |
+| `CVC_RUNTIME_API_KEY` | Optional later override if you split runtime from primary |
 
 Legacy: `CVC_BALANCE_URL` + `CVC_API_KEY` still work as a balance override.
 
-Never put the primary key in the browser, logs or customer responses. Redact `sk-cvc-…` to a short prefix in diagnostics.
+Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc-…` to a short prefix in diagnostics.
 
 ## What is wired today
 
@@ -24,8 +24,8 @@ Never put the primary key in the browser, logs or customer responses. Redact `sk
 ## Architecture (MVP)
 
 1. Customers buy **PanaAI internal credits**; FEFO lots and platform API keys stay local.
-2. One platform CVC runtime key funds upstream capacity; coverage compares CVC balance to outstanding customer credits.
-3. Optional later: map each PanaAI key to a CVC delegated key via `POST /v1/keys` (needs primary key).
+2. One platform CVC key funds upstream capacity; coverage compares CVC balance to outstanding customer credits.
+3. Optional later: map each PanaAI key to a CVC delegated key via `POST /v1/keys`.
 
 ## Still required before live dispatch
 
