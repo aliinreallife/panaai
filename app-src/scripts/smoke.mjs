@@ -54,7 +54,7 @@ const unsafe = await call(a,`/api/v1/admin/orders/${oldOrder.data.id}/approve`,{
 const badOrder = await call(a,'/api/v1/orders',{quoteId:fresh.data.id});
 const badForm = new FormData(); badForm.set('file',new Blob(['<script>not an image</script>'],{type:'image/png'}),'fake.png'); badForm.set('amountToman','90000'); badForm.set('transferredAt',new Date().toISOString());
 const bad = await call(a,`/api/v1/orders/${badOrder.data.id}/receipt`,badForm); assert.equal(bad.status,400); assert.equal(bad.data.code,'receipt_invalid'); pass('spoofed image rejected');
-const key = await call(a,'/api/v1/keys',{name:'Automated key test',budget:1000000,rateLimit:60,allowedModels:['gpt-4o']}); assert.equal(key.status,201); assert.ok(key.data.secret.startsWith('sk_test_'));
+const key = await call(a,'/api/v1/keys',{name:'Automated key test',budget:1000000,rateLimit:60,allowedModels:['gpt-4o']}); assert.equal(key.status,201); assert.ok(key.data.secret.startsWith('pana-'));
 const keyList = await call(a,'/api/v1/keys'); assert.ok(!JSON.stringify(keyList.data).includes(key.data.secret));
 const auth = {authorization:`Bearer ${key.data.secret}`};
 const modelList = await call(session(),'/v1/models',undefined,'GET',auth); assert.equal(modelList.status,200); assert.deepEqual(modelList.data.data.map(m=>m.id),['gpt-4o']); assert.equal(modelList.data.metadata,undefined); assert.ok(modelList.data.data.every(m=>m.owned_by==='panaai'));

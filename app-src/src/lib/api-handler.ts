@@ -275,7 +275,7 @@ export async function handler(req: NextRequest, context: Context) {
           logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
         }
       }
-      const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
+      const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const created = await db.transaction(async tx => {
         await tx.select().from(s.users).where(eq(s.users.id, user.id)).for("update");
@@ -300,7 +300,7 @@ export async function handler(req: NextRequest, context: Context) {
           logger.info("upstream_key.ready_on_platform_key_rotate", { userId: user.id, created: provisioned.created, prefix: provisioned.prefix });
         }
       }
-      const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
+      const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const result = await db.transaction(async tx => {
         const [old] = await tx.select().from(s.keys).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id))).for("update");
