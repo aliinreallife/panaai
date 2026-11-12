@@ -28,8 +28,8 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 ## Architecture (MVP)
 
 1. Customers buy **PanaAI internal credits**; FEFO lots, limits, unused balance and platform API keys stay local.
-2. Customers call **PanaAI** `/v1`; the gateway swaps in the upstream key server-side. Customers never see supplier names or keys.
-3. Today one **platform** upstream key funds capacity; coverage compares upstream balance to outstanding customer credits. Per-wallet delegated upstream keys (`createDelegatedKey`) are the next step — helper exists, not wired yet.
+2. Customers call **PanaAI** `/v1`; the gateway provisions/loads a **per-wallet delegated upstream key** (`platform_upstream_credentials`, encrypted at rest) and proxies with that key only.
+3. `CVC_PRIMARY_API_KEY` is for **management** (mint delegated keys, catalog sync, platform balance/coverage). It is never used as the shared chat runtime key for all customers.
 4. `system.creditsPerCvcToken` (default 1) converts upstream billed tokens into internal credits for usage reports.
 5. Streaming (`stream: true`) is rejected until SSE settlement is implemented.
 
@@ -37,5 +37,4 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 
 1. Written reseller authorization and confirmed markup (`creditsPerCvcToken` / package FX).
 2. Real SMS login, bank destination, and staff accounts (see `docs/PRODUCTION.md`).
-3. Per-customer upstream key mapped to their wallet (optional hardening vs shared platform key).
-4. Optional: streaming proxy + deeper crash reconciliation against `GET /v1/keys/logs`.
+3. Optional: rotate/revoke delegated upstream keys from admin, streaming proxy, deeper crash reconciliation against `GET /v1/keys/logs`.

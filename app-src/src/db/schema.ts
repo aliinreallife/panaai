@@ -253,3 +253,19 @@ export const platformState = pgTable("platform_state", {
   value: jsonb("value").$type<Record<string, unknown>>().notNull().default({}),
   updatedAt: date("updated_at"),
 });
+
+/**
+ * Per-customer upstream (reseller) runtime credential.
+ * Plaintext never leaves the server; only the encrypted blob is stored.
+ * Platform PRIMARY key creates these; customer traffic must not share one upstream key.
+ */
+export const upstreamCredentials = pgTable("platform_upstream_credentials", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  encryptedSecret: text("encrypted_secret").notNull(),
+  prefix: text("prefix").notNull(),
+  upstreamRef: text("upstream_ref"),
+  meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: date("created_at"),
+  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});

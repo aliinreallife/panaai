@@ -95,6 +95,7 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   if (route === "admin/provider/sync" && m === "POST") {
     const view = await evaluateProvider(user, { force: true, reason: "manual_sync" });
     const { syncPlatformCatalog } = await import("@/lib/models");
+    const { upstreamKeyStatus } = await import("@/lib/upstream-keys");
     const catalog = await syncPlatformCatalog({ reason: "admin_manual_sync", force: true });
     // Keep a per-account mirror for older tooling; platform_state is the source of truth.
     if (catalog.ok) {
@@ -110,6 +111,7 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
         syncedAt: catalog.meta.syncedAt,
         ids: catalog.models.map(m => m.id).slice(0, 50),
       },
+      upstreamCredential: await upstreamKeyStatus(user.id),
     });
   }
   if (route === "admin/maintenance" && m === "POST") {

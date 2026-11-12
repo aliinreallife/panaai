@@ -212,19 +212,22 @@ export type CvcProxyResult =
 /**
  * Forward a non-streaming OpenAI-compatible JSON body to CVC.
  * Streaming is rejected by the gateway before this is called (settlement needs a final cost).
+ * `runtimeKey` must be the customer's delegated upstream key — never share one platform key across wallets.
  */
 export async function proxyCvcJson(
   path: "chat/completions" | "responses",
   payload: unknown,
-  cfg: CvcConfig = cvcConfig(),
+  opts: { runtimeKey: string; cfg?: CvcConfig },
 ): Promise<CvcProxyResult> {
-  if (!cfg.runtimeKey) return { ok: false, status: 503, code: "not_configured", message: "CVC key is not configured." };
+  const cfg = opts.cfg ?? cvcConfig();
+  const runtimeKey = opts.runtimeKey?.trim();
+  if (!runtimeKey) return { ok: false, status: 503, code: "not_configured", message: "Upstream runtime key is not configured." };
   const started = Date.now();
   try {
     const res = await fetch(`${cfg.baseUrl}/v1/${path}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${cfg.runtimeKey}`,
+        Authorization: `Bearer ${runtimeKey}`,
         Accept: "application/json",
         "Content-Type": "application/json",
       },
@@ -253,8 +256,8 @@ export async function proxyCvcJson(
 }
 
 /**
- * Control-plane helper: create a delegated key. Requires PRIMARY_API_KEY.
- * Not used by the customer path; reserved for operator tooling / future 1:1 mapping.
+ * Control-plane helper: create a delegated customer key. Requires PRIMARY_API_KEY.
+ * Used by ensureUserUpstreamKey so each wallet has its own upstream credential.
  */
 export async function createDelegatedKey(
   input: { name?: string; token_limit?: number | null; allowed_models?: string[] },
