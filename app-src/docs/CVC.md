@@ -20,7 +20,7 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 - `src/lib/provider.ts` — live balance observation
 - `src/lib/gateway-handler.ts` — FEFO reserve → CVC proxy → settle from `cost_tokens × creditsPerCvcToken`
 - Admin **بررسی دوباره وضعیت** also syncs `GET /v1/models` into `cvc:catalog`
-- Hourly cron `GET /api/cron/maintenance` (needs `CRON_SECRET`) releases stale reservations and deletes usage metadata older than 365 days
+- Daily cron `GET /api/cron/maintenance` at 03:00 UTC (needs `CRON_SECRET`; Hobby plan allows one run/day) releases stale reservations and deletes usage metadata older than 365 days
 - Sandbox simulator remains the default; set `CVC_LIVE_DISPATCH=true` (or `PLATFORM_MODE=live` with a key) to proxy for real
 
 ## Architecture (MVP)
