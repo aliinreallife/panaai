@@ -61,7 +61,6 @@ await shot('04-purchase-inline-error');
 await page.getByRole('group', { name: 'مقادیر پیشنهادی مبلغ دلخواه' }).getByRole('button', { name: '۲۰۰٬۰۰۰' }).click();
 assert.equal(await custom.inputValue(), '۲۰۰٬۰۰۰');
 await page.getByRole('button', { name: 'دریافت پیش‌فاکتور' }).click();
-await page.getByRole('checkbox', { name: 'می‌دانم این سفارش آزمایشی است و نباید وجهی منتقل کنم.' }).check();
 await page.getByRole('button', { name: 'تأیید و ایجاد سفارش' }).click();
 await page.getByRole('button', { name: 'ثبت رسید و ارسال برای بررسی' }).waitFor();
 await page.locator('.deadline-countdown').first().waitFor();
