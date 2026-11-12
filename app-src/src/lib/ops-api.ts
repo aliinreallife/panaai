@@ -8,7 +8,7 @@ import { ApiError, PRICING, sandboxOnly } from "@/lib/server";
 import { authorizeAdmin, confirmMfa, demoTotp, dropElevation, elevate, enrollMfa, securityStatus } from "@/lib/security";
 import { channelConfig, evaluateProvider, listAlerts, raiseAlert } from "@/lib/provider";
 import { adjust, reconcile, reverseForRefund } from "@/lib/wallet";
-import { ROLE_INFO, SYSTEM_LIMITS, refundable, systemSettings, type Role } from "@/lib/rules";
+import { ROLE_INFO, SYSTEM_DEFAULTS, SYSTEM_LIMITS, refundable, systemSettings, type Role } from "@/lib/rules";
 
 type User = typeof s.users.$inferSelect;
 const ok = (data: unknown = { ok: true }, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -217,7 +217,7 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
       graceMinutes: int("graceMinutes"),
       lowBalanceCredits: int("lowBalanceCredits"),
       maxKeys: int("maxKeys"),
-      creditsPerCvcToken: int("creditsPerCvcToken"),
+      creditsPerCvcToken: int("creditsPerCvcToken").default(SYSTEM_DEFAULTS.creditsPerCvcToken),
       reason,
     }).parse(await body());
     const { reason: why, ...values } = input;
