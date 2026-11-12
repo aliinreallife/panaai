@@ -23,9 +23,10 @@ export function NumericField({ label, value, onChange, min, max, required = fals
   const show = !!error && (touched || (value !== "" && !!error));
   const display = (negative ? "−" : "") + groupFa(digits);
   const numeric = Number(value);
+  const hasClear = !!value && !disabled;
   return <div className={`field numeric-field ${show ? "field-invalid" : ""}`}>
     <label htmlFor={id}>{label}{optional && <small> (اختیاری)</small>}</label>
-    <div className="numeric-input">
+    <div className={`numeric-input${unit ? " has-unit" : ""}${hasClear ? " has-clear" : ""}`}>
       <input id={id} name={name} inputMode="numeric" dir="ltr" autoComplete="off" value={display} placeholder={placeholder} disabled={disabled}
         aria-invalid={show || undefined} aria-describedby={`${id}-hint ${id}-error`} aria-required={required || undefined}
         onBlur={() => setTouched(true)}
@@ -38,7 +39,7 @@ export function NumericField({ label, value, onChange, min, max, required = fals
           }
         }} />
       {unit && <span className="numeric-unit">{unit}</span>}
-      {value && !disabled ? <button type="button" className="search-clear" aria-label={`پاک‌کردن ${label}`} onClick={() => { onChange(""); setTouched(true); }}><Icon name="close" size={13} /></button> : null}
+      {hasClear ? <button type="button" className="search-clear" aria-label={`پاک‌کردن ${label}`} onClick={() => { onChange(""); setTouched(true); }}><Icon name="close" size={13} /></button> : null}
     </div>
     {presets?.length ? <div className="quick-amounts" role="group" aria-label={`مقادیر پیشنهادی ${label}`}>{presets.map(v => <button key={v} type="button" className={numeric === v ? "active" : ""} aria-pressed={numeric === v} onClick={() => { onChange(String(v)); setTouched(true); }}>{fa(v)}</button>)}</div> : null}
     <small id={`${id}-hint`} className="field-hint">{hint}{!show && value && describe && Number.isSafeInteger(numeric) ? <> {describe(numeric)}</> : null}</small>

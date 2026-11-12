@@ -1,11 +1,19 @@
-/* Numeric fields: Persian digits, units, inline range errors */
+/* Numeric fields: LTR digits; unit + clear sit on the right (end), not stacked on the left */
 .numeric-field>label{display:flex;gap:4px;align-items:baseline}
 .numeric-field>label small{color:var(--muted);font-weight:400}
 .numeric-input{position:relative;display:flex;align-items:center}
-.numeric-input input{padding-inline-end:12px!important;padding-inline-start:64px!important;letter-spacing:0}
-.numeric-input .numeric-unit{position:absolute;left:34px;font-size:var(--fs-xs);color:var(--muted);pointer-events:none}
-.numeric-input .search-clear{left:8px}
-.numeric-input input:not(:placeholder-shown)~.numeric-unit{left:34px}
+.numeric-input input{padding-inline:12px!important;letter-spacing:0;text-align:start}
+.numeric-input.has-clear input{padding-inline-end:36px!important}
+.numeric-input.has-unit input{padding-inline-end:56px!important}
+.numeric-input.has-unit.has-clear input{padding-inline-end:84px!important}
+.numeric-input .numeric-unit{
+  position:absolute;inset-inline-end:12px;top:50%;transform:translateY(-50%);
+  font-size:var(--fs-xs);color:var(--muted);pointer-events:none;white-space:nowrap;
+}
+.numeric-input.has-clear .numeric-unit{inset-inline-end:36px}
+.numeric-input .search-clear{
+  position:absolute;inset-inline-end:8px;left:auto;top:50%;transform:translateY(-50%);
+}
 .field-error:empty{display:none}
 .field-error{color:var(--danger);font-size:var(--fs-xs);line-height:1.8;display:flex;gap:5px;align-items:center}
 .field-error::before{content:"!";display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--danger-bg);font-weight:700;font-size:var(--fs-2xs)}
