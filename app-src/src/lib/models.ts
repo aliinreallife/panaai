@@ -51,17 +51,23 @@ function prettyName(id: string) {
 
 export function toUiModel(row: CvcModel, index = 0): UiModel {
   const known = MODEL_CATALOG.find(m => m.id === row.id);
-  if (known) return { ...known, multiplier: row.multiplier ?? row.base_multiplier ?? null, live: true };
+  const multiplier = row.multiplier ?? row.base_multiplier ?? null;
+  if (known) return { ...known, multiplier, live: true };
   const { company, mark } = companyFromId(row.id);
+  const hint = company === "OpenAI" ? "مناسب گفت‌وگو، کدنویسی و استدلال عمومی"
+    : company === "Anthropic" ? "قوی در نوشتار دقیق، تحلیل و کارهای طولانی"
+      : company === "Google" ? "مناسب جست‌وجوی دانش و پاسخ‌های چندرسانه‌ای"
+        : company === "DeepSeek" ? "گزینه اقتصادی برای کدنویسی و استدلال"
+          : "مدل فعال در فهرست پانا";
   return {
     id: row.id,
     name: prettyName(row.id),
     company,
     color: COLORS[index % COLORS.length],
-    context: "—",
-    description: "مدل فعال پانا",
+    context: "",
+    description: hint,
     mark,
-    multiplier: row.multiplier ?? row.base_multiplier ?? null,
+    multiplier,
     live: true,
   };
 }
