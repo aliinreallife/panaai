@@ -252,6 +252,8 @@ export function SystemOps() {
   const [values, setValues] = useState(() => Object.fromEntries(
     (Object.keys(SYSTEM_DEFAULTS) as (keyof typeof SYSTEM_DEFAULTS)[]).map((k) => [k, String((data.system as Record<string, number>)[k] ?? SYSTEM_DEFAULTS[k])])
   ) as Record<keyof typeof SYSTEM_LIMITS, string>);
+  const [cardNumber, setCardNumber] = useState(data.payments?.destinationCard || "");
+  const [cardReason, setCardReason] = useState("");
   const [reason, setReason] = useState(""); const [busy, setBusy] = useState(""); const [error, setError] = useState("");
   const manage = allowed("system.manage");
   const fields: { key: keyof typeof SYSTEM_LIMITS; label: string; unit: string; hint: string; adminOnly?: boolean }[] = [
@@ -267,13 +269,23 @@ export function SystemOps() {
   const buy = Number(values.upstreamTokensPerUsd) || 0;
   const margin = sell > 0 && buy > 0 ? Math.round((1 - sell / buy) * 1000) / 10 : null;
   const invalid = fields.some(f => rangeError(values[f.key], { min: SYSTEM_LIMITS[f.key][0], max: SYSTEM_LIMITS[f.key][1], required: true }));
+  const cardDigits = cardNumber.replace(/\D/g, "");
+  const cardInvalid = !/^\d{16,19}$/.test(cardDigits);
   return <div className="settings-layout">
+    <section className="panel padded"><div className="section-title"><h2>کارت مقصد واریز</h2><Badge tone="warning">قابل تغییر</Badge></div>
+      <form className="form-stack" onSubmit={e => { e.preventDefault(); setBusy("card"); setError(""); void act(async () => { const saved = await api<{ cardNumber: string; formatted: string }>("admin/payments/destination", { method: "PUT", body: { cardNumber: cardDigits, reason: cardReason } }); setCardNumber(saved.cardNumber); await refresh(); setCardReason(""); notify("کارت مقصد به‌روز شد."); }, setError).finally(() => setBusy("")); }}>
+        <label className="field">شماره کارت مقصد<input dir="ltr" inputMode="numeric" autoComplete="off" value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="6219…" maxLength={23} required disabled={!manage} /><span className="field-hint">پیش‌فرض فعلی قابل ویرایش است؛ در صفحه خرید به مشتری نشان داده می‌شود.</span></label>
+        <label className="field">دلیل تغییر<textarea rows={2} value={cardReason} onChange={e => setCardReason(e.target.value)} minLength={10} maxLength={1000} required disabled={!manage} /></label>
+        {error && busy === "card" && <div className="form-error" role="alert">{error}</div>}
+        <Button type="submit" busy={busy === "card"} disabled={!manage || cardInvalid || cardReason.trim().length < 10}>ذخیره کارت مقصد</Button>
+      </form>
+    </section>
     <section className="panel padded"><div className="section-title"><h2>تنظیمات سیستم</h2><Badge tone="warning">حسابرسی‌شده</Badge></div>
       <form className="form-stack" onSubmit={e => { e.preventDefault(); setBusy("system"); setError(""); void act(async () => { await api("admin/system", { method: "PUT", body: { ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, Number(v)])), reason } }); await refresh(); setReason(""); notify("تنظیمات سیستم ذخیره شد."); }, setError).finally(() => setBusy("")); }}>
         {fields.map(f => <NumericField key={f.key} label={f.label} unit={f.unit} value={values[f.key]} onChange={v => setValues({ ...values, [f.key]: v })} min={SYSTEM_LIMITS[f.key][0]} max={SYSTEM_LIMITS[f.key][1]} required hint={`${f.hint} مجاز: ${fa(SYSTEM_LIMITS[f.key][0])} تا ${fa(SYSTEM_LIMITS[f.key][1])}.`} disabled={!manage} />)}
         {margin !== null && <Notice tone="info" title="حاشیه تجاری (فقط ادمین)">با نرخ‌های فعلی حدود {fa(margin)}٪ حاشیه نسبت به بالادست دارید. عدد بالادست هرگز به مشتری نشان داده نمی‌شود.</Notice>}
         <label className="field">دلیل تغییر<textarea rows={2} value={reason} onChange={e => setReason(e.target.value)} minLength={10} maxLength={1000} required disabled={!manage} /></label>
-        {error && <div className="form-error" role="alert">{error}</div>}
+        {error && busy === "system" && <div className="form-error" role="alert">{error}</div>}
         <Button type="submit" busy={busy === "system"} disabled={!manage || invalid || reason.trim().length < 10}>ذخیره تنظیمات</Button>
         {!manage && <Notice>فقط نقش «مالک» می‌تواند تنظیمات سیستم را تغییر دهد.</Notice>}
       </form>

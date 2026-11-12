@@ -217,6 +217,19 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
     return ok();
   }
 
+  if (route === "admin/payments/destination" && m === "GET") {
+    const { formatCardNumber, readDestinationCard } = await import("@/lib/payments");
+    const dest = await readDestinationCard();
+    return ok({ ...dest, formatted: formatCardNumber(dest.cardNumber) });
+  }
+  if (route === "admin/payments/destination" && m === "PUT") {
+    const input = z.object({ cardNumber: z.string().min(16).max(32), reason }).parse(await body());
+    const { formatCardNumber, writeDestinationCard } = await import("@/lib/payments");
+    const dest = await writeDestinationCard(input.cardNumber);
+    await db.insert(s.audit).values({ userId: user.id, action: "payments.destination_updated", details: { cardLast4: dest.cardNumber.slice(-4), reason: input.reason } });
+    return ok({ ...dest, formatted: formatCardNumber(dest.cardNumber) });
+  }
+
   /* ---- system settings ---- */
   if (route === "admin/system" && m === "PUT") {
     const int = (k: keyof typeof SYSTEM_LIMITS) => z.number().int().min(SYSTEM_LIMITS[k][0]).max(SYSTEM_LIMITS[k][1]);

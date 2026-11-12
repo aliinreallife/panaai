@@ -215,5 +215,11 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     refunds: refundRows,
     // Wholesale upstream rate stays off the customer payload.
     system: isOperator(user.role) ? systemSettings(user.settings) : customerSystemSettings(user.settings),
-    pricing: pricingFor(user), updatedAt: new Date().toISOString() };
+    pricing: pricingFor(user),
+    payments: await (async () => {
+      const { formatCardNumber, readDestinationCard } = await import("@/lib/payments");
+      const dest = await readDestinationCard();
+      return { destinationCard: dest.cardNumber, destinationCardFormatted: formatCardNumber(dest.cardNumber) };
+    })(),
+    updatedAt: new Date().toISOString() };
 }

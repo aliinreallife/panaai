@@ -152,6 +152,7 @@ export function permissionFor(route: string, method: string): Permission | null 
     [/^admin\/channels$/, "alerts.manage"],
     [/^admin\/users\/state$/, "users.manage"],
     [/^admin\/system$/, "system.manage"],
+    [/^admin\/payments\/destination$/, "system.manage"],
     [/^admin\/maintenance$/, "system.manage"],
   ];
   return rules.find(([pattern]) => pattern.test(route))?.[1] ?? null;

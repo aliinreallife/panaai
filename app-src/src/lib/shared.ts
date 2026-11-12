@@ -61,6 +61,7 @@ export type AppData = {
   refunds: RefundItem[];
   system: import("@/lib/rules").SystemSettings | import("@/lib/rules").CustomerSystemSettings;
   pricing: { rateIrr: number; creditsPerUsd: number; minToman: number; maxToman: number; version: string; validityDays: number };
+  payments: { destinationCard: string; destinationCardFormatted: string };
   updatedAt: string;
 };
 export type PackageItem = { id: string; label: string; subtitle: string; amountToman: number; icon: string; featured: boolean };
