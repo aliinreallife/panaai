@@ -7,7 +7,8 @@ import sharp from "sharp";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { getUsageReport, exportUsage, reportOptions } from "@/lib/analytics";
-import { ApiError, PRICING, createSandbox, dataFor, isDemo, decryptImage, encryptImage, getUser, limit, requireUser, sandboxOnly, sha, verifier, pricingFor } from "@/lib/server";
+import { ApiError, PRICING, createSandbox, dataFor, isDemo, decryptImage, encryptImage, getUser, limit, requireUser, sha, verifier, pricingFor } from "@/lib/server";
+import { isOperator } from "@/lib/rules";
 import { ascii } from "@/lib/shared";
 import { systemSettings } from "@/lib/rules";
 import { logger } from "@/lib/logger";
@@ -63,7 +64,6 @@ export async function handler(req: NextRequest, context: Context) {
     const user = await requireUser();
     const PRICING = await pricingFor(user);
     await limit(`requests:${user.id}`, 180);
-    if (req.method !== "GET") sandboxOnly();
     if (req.method !== "GET" && user.state === "suspended" && ["quotes", "orders", "keys", "refunds"].includes(segments[0])) throw new ApiError("account_suspended", "حساب شما معلق است؛ ثبت سفارش، کلید یا درخواست جدید ممکن نیست. با پشتیبانی تماس بگیرید.", 403);
     if (segments[0] === "admin") {
       const { adminOps } = await import("@/lib/ops-api");
@@ -75,9 +75,11 @@ export async function handler(req: NextRequest, context: Context) {
     }
     if (req.method === "GET") {
       if (route === "admin/audit") {
-        sandboxOnly();
-        if (!user.demo) throw new ApiError("forbidden", "دسترسی به حسابرسی مدیریت مجاز نیست.", 403);
-        return success(await db.select().from(s.audit).where(eq(s.audit.userId, user.id)).orderBy(desc(s.audit.createdAt)).limit(100));
+        if (!isOperator(user.role)) throw new ApiError("not_found", "مسیر یافت نشد.", 404);
+        const rows = isDemo
+          ? await db.select().from(s.audit).where(eq(s.audit.userId, user.id)).orderBy(desc(s.audit.createdAt)).limit(100)
+          : await db.select().from(s.audit).orderBy(desc(s.audit.createdAt)).limit(200);
+        return success(rows);
       }
       if (route === "analytics" || route === "analytics/export") {
         const options = reportOptions.parse(Object.fromEntries(req.nextUrl.searchParams));
@@ -94,9 +96,13 @@ export async function handler(req: NextRequest, context: Context) {
       }
       if (segments[0] === "orders" && segments[2] === "receipt") {
         const orderId = uuid.parse(segments[1]);
-        const [receipt] = await db.select().from(s.receipts).where(and(eq(s.receipts.orderId, orderId), eq(s.receipts.userId, user.id))).orderBy(desc(s.receipts.createdAt)).limit(1);
+        const asAdmin = req.nextUrl.searchParams.has("admin");
+        if (asAdmin && !isOperator(user.role)) throw new ApiError("not_found", "رسیدی برای این سفارش یافت نشد.", 404);
+        const [receipt] = asAdmin
+          ? await db.select().from(s.receipts).where(eq(s.receipts.orderId, orderId)).orderBy(desc(s.receipts.createdAt)).limit(1)
+          : await db.select().from(s.receipts).where(and(eq(s.receipts.orderId, orderId), eq(s.receipts.userId, user.id))).orderBy(desc(s.receipts.createdAt)).limit(1);
         if (!receipt) throw new ApiError("not_found", "رسیدی برای این سفارش یافت نشد.", 404);
-        await db.insert(s.audit).values({ userId: user.id, action: req.nextUrl.searchParams.has("admin") ? "receipt.admin_viewed" : "receipt.viewed", targetId: orderId, details: { sandbox: true } });
+        await db.insert(s.audit).values({ userId: user.id, action: asAdmin ? "receipt.admin_viewed" : "receipt.viewed", targetId: orderId, details: { mode: isDemo ? "sandbox" : "live" } });
         return new NextResponse(new Uint8Array(await decryptImage(receipt.encryptedData)), { headers: { "Content-Type": "image/webp", "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline; filename=receipt.webp" } });
       }
     }
@@ -238,17 +244,19 @@ export async function handler(req: NextRequest, context: Context) {
       return success(updated);
     }
     if (req.method === "POST" && segments[0] === "admin" && segments[1] === "orders") {
-      sandboxOnly();
-      if (!user.demo) throw new ApiError("forbidden", "دسترسی به مدیریت مجاز نیست.", 403);
+      if (!isOperator(user.role)) throw new ApiError("not_found", "مسیر یافت نشد.", 404);
+      const { authorizeAdmin } = await import("@/lib/security");
+      await authorizeAdmin(user, route, req.method);
       const orderId = uuid.parse(segments[2]); const action = segments[3];
       const input = z.object({ note: z.string().trim().min(10).max(1000), bankReference: z.string().trim().max(100).optional(), bankVerified: z.boolean().optional(), confirmedIrr: z.number().int().positive().optional(), reasonCode: z.enum(["bank_not_received", "amount_mismatch", "duplicate_reference", "unclear_receipt", "other"]).optional(), customerMessage: z.string().trim().max(500).optional() }).parse(await json(req));
       const result = await db.transaction(async tx => {
-        const [order] = await tx.select().from(s.orders).where(and(eq(s.orders.id, orderId), eq(s.orders.userId, user.id))).for("update");
+        const [order] = await tx.select().from(s.orders).where(eq(s.orders.id, orderId)).for("update");
         if (!order) throw new ApiError("not_found", "سفارش یافت نشد.", 404);
         if (order.state === "approved_and_credited") {
           if (action === "approve") return { ...order, alreadyCredited: true };
           throw new ApiError("order_already_credited", "سفارش تأییدشده قابل ویرایش نیست؛ اصلاح به رویداد جبرانی نیاز دارد.", 409);
         }
+        const customerId = order.userId;
         let nextState: string;
         if (action === "approve") {
           if (!["receipt_submitted", "under_review"].includes(order.state)) throw new ApiError("invalid_transition", "ابتدا رسید معتبر و مبلغ منطبق باید ثبت شود.", 409);
@@ -256,10 +264,10 @@ export async function handler(req: NextRequest, context: Context) {
           const [receipt] = await tx.select({ id: s.receipts.id }).from(s.receipts).where(eq(s.receipts.orderId, order.id)).limit(1);
           if (!receipt) throw new ApiError("receipt_required", "تصویر رسید ثبت نشده است.");
           const reference = input.bankReference.replace(/\s/g, "").toUpperCase();
-          await tx.insert(s.bankVerifications).values({ userId: user.id, orderId, fingerprint: sha(`sandbox-destination:${reference}`), bankReference: reference, amountIrr: order.amountIrr, note: input.note });
-          const [lot] = await tx.insert(s.lots).values({ userId: user.id, orderId, granted: order.credits, remaining: order.credits, expiresAt: new Date(Date.now() + PRICING.validityDays * 86400000) }).returning();
-          const [event] = await tx.insert(s.walletEvents).values({ userId: user.id, lotId: lot.id, type: "grant", delta: order.credits, description: `شارژ آزمایشی سفارش ${order.reference}`, idempotencyKey: `order-grant:${orderId}` }).returning();
-          await tx.insert(s.journal).values([{ eventId: event.id, account: `customer:${user.id}`, delta: order.credits }, { eventId: event.id, account: "issuer:demo", delta: -order.credits }]);
+          await tx.insert(s.bankVerifications).values({ userId: customerId, orderId, fingerprint: sha(`destination:${reference}`), bankReference: reference, amountIrr: order.amountIrr, note: input.note });
+          const [lot] = await tx.insert(s.lots).values({ userId: customerId, orderId, granted: order.credits, remaining: order.credits, expiresAt: new Date(Date.now() + PRICING.validityDays * 86400000) }).returning();
+          const [event] = await tx.insert(s.walletEvents).values({ userId: customerId, lotId: lot.id, type: "grant", delta: order.credits, description: `شارژ سفارش ${order.reference}`, idempotencyKey: `order-grant:${orderId}` }).returning();
+          await tx.insert(s.journal).values([{ eventId: event.id, account: `customer:${customerId}`, delta: order.credits }, { eventId: event.id, account: "issuer:platform", delta: -order.credits }]);
           nextState = "approved_and_credited";
         } else if (action === "reject") {
           if (!input.reasonCode || !input.customerMessage || input.customerMessage.length < 10) throw new ApiError("customer_message_required", "کد دلیل و توضیح قابل نمایش به مشتری الزامی است.");
@@ -270,8 +278,8 @@ export async function handler(req: NextRequest, context: Context) {
           if (!["receipt_submitted", "under_review", "needs_manual_resolution", "rejected"].includes(order.state)) throw new ApiError("invalid_transition", "وضعیت سفارش اجازه درخواست مدرک نمی‌دهد.", 409);
           nextState = "needs_more_information";
         } else throw new ApiError("not_found", "عملیات یافت نشد.", 404);
-        const [updated] = await tx.update(s.orders).set({ state: nextState, reviewNote: action === "approve" ? "بررسی آزمایشی تکمیل شد و اعتبار سفارش به کیف پول اضافه شد." : input.customerMessage, ...(action === "approve" ? { approvedAt: new Date() } : {}) }).where(eq(s.orders.id, orderId)).returning();
-        await tx.insert(s.audit).values({ userId: user.id, action: `payment.${action}`, targetId: orderId, details: { actor: "sandbox_operator", from: order.state, to: nextState, reason: input.note, reasonCode: input.reasonCode || null, customerMessage: input.customerMessage || null, amountIrr: order.amountIrr, bankReference: input.bankReference || null } });
+        const [updated] = await tx.update(s.orders).set({ state: nextState, reviewNote: action === "approve" ? "بررسی تکمیل شد و اعتبار سفارش به کیف پول اضافه شد." : input.customerMessage, ...(action === "approve" ? { approvedAt: new Date() } : {}) }).where(eq(s.orders.id, orderId)).returning();
+        await tx.insert(s.audit).values({ userId: user.id, action: `payment.${action}`, targetId: orderId, details: { actor: user.id, customerId, from: order.state, to: nextState, reason: input.note, reasonCode: input.reasonCode || null, customerMessage: input.customerMessage || null, amountIrr: order.amountIrr, bankReference: input.bankReference || null } });
         return updated;
       });
       return success(result);
@@ -354,18 +362,23 @@ export async function handler(req: NextRequest, context: Context) {
         if (challenge.codeHash !== await verifier(input.code)) return false;
         await tx.update(s.otpChallenges).set({ usedAt: new Date() }).where(eq(s.otpChallenges.id, challenge.id));
         const staff = isAdminPhone(challenge.phone);
-        await tx.update(s.users).set({ phone: challenge.phone, ...(staff ? { role: "owner" } : {}) }).where(eq(s.users.id, user.id));
+        await tx.update(s.users).set({
+          phone: challenge.phone,
+          // Live (or real SMS) accounts leave demo; admin phones become owner.
+          ...((!isDemo || liveSms) ? { demo: false } : {}),
+          ...(staff ? { role: "owner" as const } : {}),
+        }).where(eq(s.users.id, user.id));
         await tx.insert(s.audit).values({
           userId: user.id,
           action: liveSms ? "auth.otp_verified" : "auth.demo_verified",
-          details: { realSms: liveSms, staff },
+          details: { realSms: liveSms, staff, mode: isDemo ? "sandbox" : "live" },
         });
         return true;
       });
       if (!result) throw new ApiError("invalid_otp", "کد نادرست، استفاده‌شده یا منقضی است.");
       const { recordSmsVerified } = await import("@/lib/sms-metrics");
       await recordSmsVerified();
-      return success({ ok: true, demo: !liveSms });
+      return success({ ok: true, demo: isDemo && !liveSms });
     }
     const { customerOps } = await import("@/lib/ops-api");
     const handled = await customerOps(req, user, route, () => json(req));

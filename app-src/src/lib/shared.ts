@@ -62,6 +62,8 @@ export type AppData = {
   system: import("@/lib/rules").SystemSettings | import("@/lib/rules").CustomerSystemSettings;
   pricing: { rateIrr: number; creditsPerUsd: number; minToman: number; maxToman: number; version: string; validityDays: number };
   payments: { destinationCard: string; destinationCardFormatted: string };
+  /** Platform payment queue for staff; absent for customers. */
+  adminOrders?: Array<OrderItem & { customerName: string; customerPhone: string | null }>;
   updatedAt: string;
 };
 export type PackageItem = { id: string; label: string; subtitle: string; amountToman: number; icon: string; featured: boolean };

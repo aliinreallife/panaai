@@ -33,10 +33,10 @@ These are business integrations and decisions. Each one needs an account, a cont
 
 ## Going live (after the list above)
 
-1. Set `PLATFORM_MODE=live` and remove `SANDBOX_OPERATOR_ACCESS` in Vercel → Settings → Environment Variables (Production).
-2. Make sure `RECEIPT_ENCRYPTION_KEY` is set and backed up. Never change it after data exists.
+1. Set `PLATFORM_MODE=live` and remove `SANDBOX_OPERATOR_ACCESS` / `SANDBOX_SEED_DEMO` in Vercel → Settings → Environment Variables (Production).
+2. Make sure `RECEIPT_ENCRYPTION_KEY`, Kavenegar (`KAVENEGAR_API_KEY` + `KAVENEGAR_OTP_TEMPLATE`), and CVC keys are set.
 3. Run `npm run db:push` against the production database for any schema change (see DEPLOY.md, "Database changes").
-4. Redeploy. The startup log must show `"event":"startup"` with `"mode":"live"` and no `startup.warning` you did not expect.
-5. Check `/api/health`, then sign in as a real customer and as staff, and confirm a customer gets 404 on `/admin`.
+4. Redeploy. The startup log must show `"event":"startup"` with `"mode":"live"` and no unexpected `startup.warning`.
+5. Clear old sandbox cookies, open the site, verify phone with an admin number (`09203050405` / `09225006434`) to become owner, enroll TOTP, then confirm a normal customer gets 404 on `/admin`.
 
-Until all of that is done, keep the hosted app in `sandbox` mode (the default) and treat it as a demo.
+Live mode creates real (non-demo) workspaces, allows purchases/keys/admin for staff, and shows a platform-wide payment queue. Keep FX and destination card set in admin.

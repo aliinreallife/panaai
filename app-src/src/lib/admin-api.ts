@@ -3,11 +3,13 @@ import { db } from "@/db";
 import { users, audit } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { ApiError, sandboxOnly } from "@/lib/server";
+import { ApiError } from "@/lib/server";
 export async function adminAction(req: NextRequest, user: typeof users.$inferSelect, route: string, getBody: () => Promise<unknown>) {
-  sandboxOnly();
-  if (!user.demo) throw new ApiError("forbidden", "مدیریت فقط برای داده‌های آزمایشی همین حساب در دسترس است.", 403);
-  const done = () => NextResponse.json({ ok: true, demo: true }, { headers: { "Cache-Control": "private, no-store" } });
+  const { isOperator } = await import("@/lib/rules");
+  const { authorizeAdmin } = await import("@/lib/security");
+  if (!isOperator(user.role)) throw new ApiError("not_found", "مسیر یافت نشد.", 404);
+  await authorizeAdmin(user, route, req.method);
+  const done = () => NextResponse.json({ ok: true, demo: false }, { headers: { "Cache-Control": "private, no-store" } });
   if (route === "admin/provider/reconcile" && req.method === "POST") {
     const input = z.object({ balance: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), reason: z.string().trim().min(10).max(1000) }).parse(await getBody());
     await db.insert(audit).values({ userId: user.id, action: "provider.manual_reconciled", details: { ...input, verified: false, source: "manual_unverified" } });

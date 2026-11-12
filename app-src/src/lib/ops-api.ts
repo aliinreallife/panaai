@@ -36,7 +36,6 @@ async function updateSettings(user: User, patch: Record<string, string | boolean
 /** Customer-side operations that are not part of the original handler. Returns null when the route is not handled here. */
 export async function customerOps(req: NextRequest, user: User, route: string, body: () => Promise<unknown>) {
   if (route === "refunds" && req.method === "POST") {
-    sandboxOnly();
     const input = z.object({ orderId: uuid, reason }).parse(await body());
     const refund = await db.transaction(async tx => {
       const [order] = await tx.select().from(s.orders).where(and(eq(s.orders.id, input.orderId), eq(s.orders.userId, user.id))).for("update");
@@ -57,8 +56,6 @@ export async function customerOps(req: NextRequest, user: User, route: string, b
 
 /** Admin operations. Every route passes the server-side RBAC + MFA gate before reaching here. */
 export async function adminOps(req: NextRequest, user: User, route: string, body: () => Promise<unknown>) {
-  sandboxOnly();
-  if (!user.demo) throw new ApiError("forbidden", "مدیریت فقط برای داده‌های آزمایشی همین حساب در دسترس است.", 403);
   await authorizeAdmin(user, route, req.method);
   const seg = route.split("/");
   const m = req.method;
@@ -75,7 +72,8 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   if (route === "admin/mfa/drop" && m === "POST") { await dropElevation(user); return ok(); }
   if (route === "admin/mfa/demo-code" && m === "GET") return ok(await demoTotp(user));
   if (route === "admin/role" && m === "POST") {
-    // Sandbox role simulator, so each role's server-side restrictions can be tried. Audited.
+    // Sandbox role simulator only — not available in live.
+    sandboxOnly();
     const { role } = z.object({ role: z.enum(Object.keys(ROLE_INFO) as [Role, ...Role[]]) }).parse(await body());
     await db.transaction(async tx => {
       await tx.update(s.users).set({ role }).where(eq(s.users.id, user.id));

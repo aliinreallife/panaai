@@ -164,22 +164,30 @@ async function seedDemoWorkspace(tx: Tx, userId: string) {
   }
 }
 
+/** Browser workspace: sandbox → demo account; live → real empty customer (OTP can promote staff). */
 export async function createSandbox() {
-  sandboxOnly();
   const token = randomBytes(32).toString("hex");
+  const live = !isDemo;
   const user = await db.transaction(async tx => {
-    const [user] = await tx.insert(s.users).values({ name: "کاربر", demo: true, role: sandboxOperatorAccess ? "owner" : "customer" }).returning();
+    const [user] = await tx.insert(s.users).values({
+      name: "کاربر",
+      demo: !live,
+      role: !live && sandboxOperatorAccess ? "owner" : "customer",
+    }).returning();
     await tx.insert(s.sessions).values({ tokenHash: sha(token), userId: user.id, expiresAt: future(7) });
-    if (sandboxSeedDemo) await seedDemoWorkspace(tx, user.id);
+    if (!live && sandboxSeedDemo) await seedDemoWorkspace(tx, user.id);
     await tx.insert(s.audit).values({
       userId: user.id,
-      action: "sandbox.created",
+      action: live ? "workspace.created" : "sandbox.created",
       details: {
-        demo: true,
-        seeded: sandboxSeedDemo,
-        note: sandboxSeedDemo
-          ? "محیط آزمایشی با دادهٔ نمونه برای آزمون ساخته شد."
-          : "فضای کاری خالی ساخته شد؛ بدون موجودی، کلید یا مصرف نمونه.",
+        demo: !live,
+        mode: live ? "live" : "sandbox",
+        seeded: !live && sandboxSeedDemo,
+        note: live
+          ? "فضای کاری واقعی ساخته شد؛ با تأیید موبایل به حساب متصل می‌شود."
+          : sandboxSeedDemo
+            ? "محیط آزمایشی با دادهٔ نمونه برای آزمون ساخته شد."
+            : "فضای کاری خالی ساخته شد؛ بدون موجودی، کلید یا مصرف نمونه.",
       },
     });
     return user;
@@ -211,6 +219,15 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     db.select().from(s.tickets).where(own(s.tickets.userId)).orderBy(desc(s.tickets.createdAt)),
   ]);
   const eligible = lotRows.filter(l => l.expiresAt > new Date() && l.remaining > 0);
+  const adminOrders = isOperator(user.role)
+    ? await db.select({
+        id: s.orders.id, reference: s.orders.reference, amountIrr: s.orders.amountIrr, credits: s.orders.credits, rateIrr: s.orders.rateIrr,
+        state: s.orders.state, claimedIrr: s.orders.claimedIrr, transferredAt: s.orders.transferredAt, bankReference: s.orders.bankReference,
+        customerNote: s.orders.customerNote, reviewNote: s.orders.reviewNote, transferDeadline: s.orders.transferDeadline,
+        createdAt: s.orders.createdAt, approvedAt: s.orders.approvedAt,
+        customerName: s.users.name, customerPhone: s.users.phone,
+      }).from(s.orders).innerJoin(s.users, eq(s.orders.userId, s.users.id)).orderBy(desc(s.orders.createdAt)).limit(200)
+    : undefined;
   return { user: { id: user.id, name: user.name, demo: user.demo, createdAt: user.createdAt, settings: user.settings }, analytics, keys: keyRows, orders: orderRows, lots: lotRows, events: eventRows, daily: analytics.daily, usage: usageRows, audit: auditRows.filter(a => isOperator(user.role) || CUSTOMER_AUDIT.test(a.action)).map(a => ({ ...a, details: a.action.startsWith("payment.") ? { from: a.details.from, to: a.details.to, reasonCode: a.details.reasonCode, customerMessage: a.details.customerMessage } : {} })), tickets: ticketRows,
     wallet: { available: eligible.reduce((a,l) => a+l.remaining-l.reserved,0), reserved: eligible.reduce((a,l) => a+l.reserved,0), expiring7: eligible.filter(l => l.expiresAt < future(7)).reduce((a,l) => a+l.remaining,0), expiring: eligible.filter(l => l.expiresAt < future(30)).reduce((a,l) => a+l.remaining,0), nearestExpiry: eligible[0]?.expiresAt ?? null },
     // Customer payload: service state only. Balance, source and supplier details stay in admin routes.
@@ -228,5 +245,6 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
       const dest = await readDestinationCard();
       return { destinationCard: dest.cardNumber, destinationCardFormatted: formatCardNumber(dest.cardNumber) };
     })(),
+    ...(adminOrders ? { adminOrders } : {}),
     updatedAt: new Date().toISOString() };
 }
