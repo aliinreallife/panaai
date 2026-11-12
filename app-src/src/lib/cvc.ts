@@ -257,7 +257,7 @@ export async function proxyCvcJson(
 
 /**
  * Control-plane helper: create a delegated customer key. Requires PRIMARY_API_KEY.
- * Used by ensureUserUpstreamKey so each wallet has its own upstream credential.
+ * Used by ensure/remint upstream helpers so each wallet gets a dedicated CVC credential.
  */
 export async function createDelegatedKey(
   input: { name?: string; token_limit?: number | null; allowed_models?: string[] },

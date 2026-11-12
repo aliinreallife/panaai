@@ -255,9 +255,9 @@ export const platformState = pgTable("platform_state", {
 });
 
 /**
- * Per-customer upstream (reseller) runtime credential.
+ * Per-wallet upstream (reseller) runtime credential.
  * Plaintext never leaves the server; only the encrypted blob is stored.
- * Platform PRIMARY key creates these; customer traffic must not share one upstream key.
+ * Fresh mint on each platform key create/rotate; gateway uses the latest active row.
  */
 export const upstreamCredentials = pgTable("platform_upstream_credentials", {
   userId: uuid("user_id").primaryKey().references(() => users.id),

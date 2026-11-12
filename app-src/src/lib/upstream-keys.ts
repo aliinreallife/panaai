@@ -51,6 +51,34 @@ async function readActive(userId: string) {
   return row ?? null;
 }
 
+type MintMeta = {
+  platformKeyId?: string;
+  reason: "create" | "rotate" | "first_use";
+};
+
+async function callCvcMint(user: User, meta: MintMeta) {
+  const cfg = cvcConfig();
+  if (!cfg.primaryKey) {
+    throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
+  }
+  const nameSeed = (meta.platformKeyId || user.id).replace(/-/g, "").slice(0, 16);
+  const minted = await createDelegatedKey({
+    name: `pana-${nameSeed}`,
+    token_limit: null,
+  });
+  if (!minted.ok) {
+    logger.error("upstream_key.mint_failed", {
+      userId: user.id,
+      platformKeyId: meta.platformKeyId ?? null,
+      reason: meta.reason,
+      code: minted.code,
+      source: minted.source,
+    });
+    throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
+  }
+  return minted;
+}
+
 /**
  * Return (and create if needed) the customer's dedicated upstream runtime key.
  * Never falls back to the shared platform key for customer traffic.
@@ -66,11 +94,6 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
     }
   }
 
-  const cfg = cvcConfig();
-  if (!cfg.primaryKey) {
-    throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
-  }
-
   // Serialize provisioning per user so concurrent first requests do not mint many upstream keys.
   const provisioned = await db.transaction(async (tx) => {
     await tx.select().from(s.users).where(eq(s.users.id, user.id)).for("update");
@@ -80,15 +103,7 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
       .limit(1);
     if (again) return { row: again, created: false as const };
 
-    const minted = await createDelegatedKey({
-      name: `pana-${user.id.replace(/-/g, "").slice(0, 16)}`,
-      token_limit: null,
-    });
-    if (!minted.ok) {
-      logger.error("upstream_key.mint_failed", { userId: user.id, code: minted.code, source: minted.source });
-      throw new ApiError("service_unavailable", "سرویس در حال حاضر آماده ارسال درخواست نیست. اعتباری کسر نشد.", 503);
-    }
-
+    const minted = await callCvcMint(user, { reason: "first_use" });
     const encryptedSecret = await encryptSecret(minted.data.key);
     const prefix = prefixOf(minted.data.key);
     const upstreamRef = typeof minted.data.meta.id === "string"
@@ -104,6 +119,7 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
       meta: {
         source: minted.source,
         mintedAt: new Date().toISOString(),
+        reason: "first_use",
       },
     }).returning();
 
@@ -111,7 +127,7 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
       userId: user.id,
       action: "upstream_key.provisioned",
       targetId: user.id,
-      details: { prefix, upstreamRef, source: minted.source },
+      details: { prefix, upstreamRef, source: minted.source, reason: "first_use" },
     });
     return { row, created: true as const };
   });
@@ -120,6 +136,90 @@ export async function ensureUserUpstreamKey(user: User): Promise<{ key: string; 
     key: await decryptSecret(provisioned.row.encryptedSecret),
     prefix: provisioned.row.prefix,
     created: provisioned.created,
+  };
+}
+
+/**
+ * Always mint a fresh CVC delegated key and replace the wallet's stored credential.
+ * Used on every platform API key create/rotate so a new key appears in the CVC dashboard.
+ */
+export async function remintUserUpstreamKey(
+  user: User,
+  opts: { platformKeyId?: string; reason: "create" | "rotate" },
+): Promise<{ key: string; prefix: string; created: true }> {
+  const minted = await callCvcMint(user, { platformKeyId: opts.platformKeyId, reason: opts.reason });
+  const encryptedSecret = await encryptSecret(minted.data.key);
+  const prefix = prefixOf(minted.data.key);
+  const upstreamRef = typeof minted.data.meta.id === "string"
+    ? minted.data.meta.id
+    : typeof minted.data.meta.key_id === "string"
+      ? minted.data.meta.key_id
+      : null;
+  const meta = {
+    source: minted.source,
+    mintedAt: new Date().toISOString(),
+    reason: opts.reason,
+    platformKeyId: opts.platformKeyId ?? null,
+  };
+
+  const row = await db.transaction(async (tx) => {
+    await tx.select().from(s.users).where(eq(s.users.id, user.id)).for("update");
+    await ensureUpstreamTable();
+    const [existing] = await tx.select().from(s.upstreamCredentials)
+      .where(eq(s.upstreamCredentials.userId, user.id))
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await tx.update(s.upstreamCredentials).set({
+        encryptedSecret,
+        prefix,
+        upstreamRef,
+        meta,
+        rotatedAt: new Date(),
+        revokedAt: null,
+      }).where(eq(s.upstreamCredentials.userId, user.id)).returning();
+      await tx.insert(s.audit).values({
+        userId: user.id,
+        action: "upstream_key.reminted",
+        targetId: opts.platformKeyId ?? user.id,
+        details: {
+          prefix,
+          upstreamRef,
+          source: minted.source,
+          previousPrefix: existing.prefix,
+          reason: opts.reason,
+        },
+      });
+      return updated;
+    }
+
+    const [inserted] = await tx.insert(s.upstreamCredentials).values({
+      userId: user.id,
+      encryptedSecret,
+      prefix,
+      upstreamRef,
+      meta,
+    }).returning();
+    await tx.insert(s.audit).values({
+      userId: user.id,
+      action: "upstream_key.provisioned",
+      targetId: opts.platformKeyId ?? user.id,
+      details: { prefix, upstreamRef, source: minted.source, reason: opts.reason },
+    });
+    return inserted;
+  });
+
+  logger.info("upstream_key.reminted", {
+    userId: user.id,
+    platformKeyId: opts.platformKeyId ?? null,
+    reason: opts.reason,
+    prefix: row.prefix,
+  });
+
+  return {
+    key: await decryptSecret(row.encryptedSecret),
+    prefix: row.prefix,
+    created: true,
   };
 }
 
