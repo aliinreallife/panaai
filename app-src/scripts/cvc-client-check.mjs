@@ -30,6 +30,11 @@ assert.equal(c.parseCvcModels({ models: [{ id: "claude-sonnet-5", base_multiplie
 assert.deepEqual(c.parseCvcModels(null), []);
 pass("model list parsing");
 
+assert.deepEqual(c.parseCvcUsage({ usage: { prompt_tokens: 10, completion_tokens: 5, cost_tokens: 18 } }), { inputTokens: 10, outputTokens: 5, costTokens: 18 });
+assert.equal(c.parseCvcUsage({ usage: { input_tokens: 2, output_tokens: 3 } }).costTokens, 5);
+assert.equal(c.cvcLiveDispatchEnabled({ PLATFORM_MODE: "sandbox", CVC_PRIMARY_API_KEY: "sk-x" }), false);
+assert.equal(c.cvcLiveDispatchEnabled({ PLATFORM_MODE: "live", CVC_PRIMARY_API_KEY: "sk-x" }), true);
+assert.equal(c.cvcLiveDispatchEnabled({ PLATFORM_MODE: "sandbox", CVC_LIVE_DISPATCH: "true", CVC_PRIMARY_API_KEY: "sk-x" }), true);
 assert.equal(c.redactSecret("sk-cvc-plaintext-secret"), "sk-cvc-p…cret");
 assert.equal(c.redactSecret("short"), "shor…");
 assert.equal(c.redactSecret(null), null);

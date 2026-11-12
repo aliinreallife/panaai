@@ -16,20 +16,22 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 
 ## What is wired today
 
-- `src/lib/cvc.ts` — URL helpers, balance/model parsers, `GET /v1/balance`, `GET /v1/models`, `POST /v1/keys`
-- `src/lib/provider.ts` — live balance observation uses the client above
-- Sandbox still uses the admin simulator
-- Live **inference** in `gateway-handler.ts` remains fail-closed until metering is verified
+- `src/lib/cvc.ts` — balance/models/keys + JSON proxy for chat/completions and responses
+- `src/lib/provider.ts` — live balance observation
+- `src/lib/gateway-handler.ts` — FEFO reserve → CVC proxy → settle from `cost_tokens × creditsPerCvcToken`
+- Admin **بررسی دوباره وضعیت** also syncs `GET /v1/models` into `cvc:catalog`
+- Hourly cron `GET /api/cron/maintenance` (needs `CRON_SECRET`) releases stale reservations and deletes usage metadata older than 365 days
+- Sandbox simulator remains the default; set `CVC_LIVE_DISPATCH=true` (or `PLATFORM_MODE=live` with a key) to proxy for real
 
 ## Architecture (MVP)
 
 1. Customers buy **PanaAI internal credits**; FEFO lots and platform API keys stay local.
 2. One platform CVC key funds upstream capacity; coverage compares CVC balance to outstanding customer credits.
-3. Optional later: map each PanaAI key to a CVC delegated key via `POST /v1/keys`.
+3. `system.creditsPerCvcToken` (default 1) converts CVC billed tokens into internal credits.
+4. Streaming (`stream: true`) is rejected until SSE settlement is implemented.
 
-## Still required before live dispatch
+## Still required for a full commercial launch
 
-1. Written reseller authorization.
-2. Confirm how CVC `cost_tokens` / balance tokens map to PanaAI credits (and model multipliers from `GET /v1/models` or public pricing).
-3. A real (redacted) sample of `GET /v1/balance` and `GET /v1/models` JSON to lock the parsers.
-4. Streaming + crash reconciliation against CVC usage logs before opening the fail-closed gate.
+1. Written reseller authorization and confirmed markup (`creditsPerCvcToken` / package FX).
+2. Real SMS login, bank destination, and staff accounts (see `docs/PRODUCTION.md`).
+3. Optional: streaming proxy + deeper crash reconciliation against `GET /v1/keys/logs`.

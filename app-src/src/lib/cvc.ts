@@ -185,6 +185,73 @@ export async function fetchCvcModels(cfg: CvcConfig = cvcConfig()): Promise<CvcF
   }
 }
 
+/** True when the gateway should forward to CVC instead of the sandbox simulator. */
+export function cvcLiveDispatchEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.CVC_LIVE_DISPATCH === "true") return cvcBalanceConfigured(cvcConfig(env));
+  return env.PLATFORM_MODE === "live" && cvcBalanceConfigured(cvcConfig(env));
+}
+
+export type CvcUsage = { inputTokens: number; outputTokens: number; costTokens: number };
+
+/** Pull usage / cost_tokens from an OpenAI-style or CVC response body. */
+export function parseCvcUsage(body: unknown): CvcUsage {
+  if (!body || typeof body !== "object") return { inputTokens: 0, outputTokens: 0, costTokens: 0 };
+  const root = body as Record<string, unknown>;
+  const usage = (root.usage && typeof root.usage === "object" ? root.usage : {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+  const inputTokens = num(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = num(usage.completion_tokens ?? usage.output_tokens);
+  const costTokens = num(usage.cost_tokens ?? usage.total_tokens ?? (inputTokens + outputTokens));
+  return { inputTokens, outputTokens, costTokens };
+}
+
+export type CvcProxyResult =
+  | { ok: true; status: number; body: unknown; usage: CvcUsage; latencyMs: number }
+  | { ok: false; status: number; code: string; message: string; retryAfter?: number; body?: unknown };
+
+/**
+ * Forward a non-streaming OpenAI-compatible JSON body to CVC.
+ * Streaming is rejected by the gateway before this is called (settlement needs a final cost).
+ */
+export async function proxyCvcJson(
+  path: "chat/completions" | "responses",
+  payload: unknown,
+  cfg: CvcConfig = cvcConfig(),
+): Promise<CvcProxyResult> {
+  if (!cfg.runtimeKey) return { ok: false, status: 503, code: "not_configured", message: "CVC key is not configured." };
+  const started = Date.now();
+  try {
+    const res = await fetch(`${cfg.baseUrl}/v1/${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.runtimeKey}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(120000),
+      cache: "no-store",
+    });
+    const retryAfterHeader = res.headers.get("retry-after");
+    const retryAfter = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? Number(retryAfterHeader) : undefined;
+    let body: unknown = null;
+    try { body = await res.json(); } catch { body = null; }
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        code: errorCode(body) ?? (res.status === 429 ? "rate_limited" : res.status === 402 ? "insufficient_balance" : "upstream_error"),
+        message: errorMessage(body) ?? "Upstream request failed.",
+        retryAfter,
+        body,
+      };
+    }
+    return { ok: true, status: res.status, body, usage: parseCvcUsage(body), latencyMs: Date.now() - started };
+  } catch {
+    return { ok: false, status: 503, code: "network_error", message: "Upstream unreachable." };
+  }
+}
+
 /**
  * Control-plane helper: create a delegated key. Requires PRIMARY_API_KEY.
  * Not used by the customer path; reserved for operator tooling / future 1:1 mapping.

@@ -78,6 +78,20 @@ export function actualCost(model: string, inputTokens: number, outputTokens: num
   if (!price) throw new Error("unknown_model");
   return inputTokens * price.input + outputTokens * price.output;
 }
+/**
+ * Reserve for a live CVC dispatch using billed-token multipliers.
+ * `creditsPerCvcToken` converts CVC `cost_tokens` into PanaAI internal credits.
+ */
+export function liveReservationBound(inputTokens: number, maxTokens: number | null | undefined, multiplier: number, creditsPerCvcToken: number) {
+  const output = Math.min(Math.max(1, maxTokens ?? 4096), 8192);
+  const estimatedCvc = Math.ceil((Math.max(1, inputTokens) + output) * Math.max(0.01, multiplier));
+  return Math.max(1, estimatedCvc * Math.max(1, creditsPerCvcToken));
+}
+/** Convert authoritative CVC `cost_tokens` into internal credits (ceil, never undercharge). */
+export function creditsFromCvcCost(costTokens: number, creditsPerCvcToken: number) {
+  if (!Number.isFinite(costTokens) || costTokens < 0) return 0;
+  return Math.max(0, Math.ceil(costTokens * Math.max(1, creditsPerCvcToken)));
+}
 /** Rough, content-free token estimate used only for the reservation bound. */
 export const estimateTokens = (chars: number) => Math.max(1, Math.ceil(chars / 3));
 
@@ -138,6 +152,7 @@ export function permissionFor(route: string, method: string): Permission | null 
     [/^admin\/channels$/, "alerts.manage"],
     [/^admin\/users\/state$/, "users.manage"],
     [/^admin\/system$/, "system.manage"],
+    [/^admin\/maintenance$/, "system.manage"],
   ];
   return rules.find(([pattern]) => pattern.test(route))?.[1] ?? null;
 }
@@ -148,8 +163,8 @@ export const ELEVATION_MINUTES = 15;
 /* ------------------------------------------------------------------ */
 /* System settings                                                      */
 /* ------------------------------------------------------------------ */
-export const SYSTEM_DEFAULTS = { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20 };
-export const SYSTEM_LIMITS = { transferHours: [1, 72], graceMinutes: [0, 60], lowBalanceCredits: [0, 1000000000], maxKeys: [1, 100] } as const;
+export const SYSTEM_DEFAULTS = { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1 };
+export const SYSTEM_LIMITS = { transferHours: [1, 72], graceMinutes: [0, 60], lowBalanceCredits: [0, 1000000000], maxKeys: [1, 100], creditsPerCvcToken: [1, 1000] } as const;
 export type SystemSettings = typeof SYSTEM_DEFAULTS;
 export function systemSettings(settings: Record<string, unknown>): SystemSettings {
   const read = (key: keyof SystemSettings) => {
@@ -157,7 +172,7 @@ export function systemSettings(settings: Record<string, unknown>): SystemSetting
     const [min, max] = SYSTEM_LIMITS[key];
     return Number.isInteger(value) && value >= min && value <= max ? value : SYSTEM_DEFAULTS[key];
   };
-  return { transferHours: read("transferHours"), graceMinutes: read("graceMinutes"), lowBalanceCredits: read("lowBalanceCredits"), maxKeys: read("maxKeys") };
+  return { transferHours: read("transferHours"), graceMinutes: read("graceMinutes"), lowBalanceCredits: read("lowBalanceCredits"), maxKeys: read("maxKeys"), creditsPerCvcToken: read("creditsPerCvcToken") };
 }
 
 /* ------------------------------------------------------------------ */

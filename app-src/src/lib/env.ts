@@ -30,6 +30,10 @@ const schema = z.object({
   CVC_BALANCE_URL: z.string().url().optional(),
   /** Legacy key alias when used with CVC_BALANCE_URL. */
   CVC_API_KEY: z.string().min(8).optional(),
+  /** When true, sandbox also proxies /v1 chat to CVC (requires a CVC key). Live mode enables this automatically when a key is set. */
+  CVC_LIVE_DISPATCH: flag,
+  /** Bearer secret for /api/cron/maintenance (Vercel Cron Authorization header). */
+  CRON_SECRET: z.string().min(16).optional(),
   VERCEL: z.string().optional(),
 }).superRefine((env, ctx) => {
   const production = env.NODE_ENV === "production";
@@ -70,5 +74,7 @@ export function launchWarnings(env: ServerEnv) {
   if (env.SANDBOX_OPERATOR_ACCESS === "true") warnings.push("SANDBOX_OPERATOR_ACCESS=true: every new sandbox workspace gets the admin console. Internal previews only.");
   const hasBalance = !!(env.CVC_PRIMARY_API_KEY || env.CVC_RUNTIME_API_KEY || env.CVC_API_KEY || env.CVC_BALANCE_URL);
   if (env.PLATFORM_MODE === "live" && !hasBalance) warnings.push("Live mode without an upstream balance source: the API stays closed (service_unavailable).");
+  if (env.CVC_LIVE_DISPATCH === "true" && !hasBalance) warnings.push("CVC_LIVE_DISPATCH=true but no CVC key is configured; dispatch stays closed.");
+  if (env.VERCEL && !env.CRON_SECRET) warnings.push("CRON_SECRET is unset: /api/cron/maintenance will reject scheduled runs.");
   return warnings;
 }

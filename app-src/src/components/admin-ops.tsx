@@ -99,7 +99,7 @@ export function ProviderOps() {
     <div className="provider-cards">
       <section className="panel padded verified-balance"><span className="security-emblem"><Icon name="globe" size={30} /></span><h2>موجودی تأمین‌کننده</h2><strong>{view.balance === null ? "—" : compact(view.balance)}</strong><Badge tone={info.tone}>{info.label}{view.simulated ? " · شبیه‌ساز" : ""}</Badge>
         <dl className="detail-list"><div><dt>پذیرش درخواست API</dt><dd>{info.admits ? "فعال" : "متوقف"}</dd></div><div><dt>پوشش نسبت به تعهد مشتری ({compact(liabilities)})</dt><dd>{view.coverageTier === null ? "نامشخص" : `سطح ${fa(view.coverageTier)}٪`}</dd></div><div><dt>آخرین بررسی</dt><dd>{view.checkedAt ? `${persianTime(view.checkedAt)}` : "—"}</dd></div><div><dt>آخرین تغییر وضعیت</dt><dd>{persianDate(view.changedAt)}، {persianTime(view.changedAt)}</dd></div>{view.state === "grace" && view.graceUntil && <div><dt>پایان دوره ارفاق</dt><dd>{persianTime(view.graceUntil)} ({fa(data.system.graceMinutes)} دقیقه)</dd></div>}</dl>
-        <Button tone="secondary" busy={busy === "sync"} disabled={!manage} onClick={() => run("sync", "admin/provider/sync", {})}><Icon name="refresh" size={17} />بررسی دوباره وضعیت</Button>
+        <Button tone="secondary" busy={busy === "sync"} disabled={!manage} onClick={() => run("sync", "admin/provider/sync", {})}><Icon name="refresh" size={17} />بررسی وضعیت و همگام‌سازی مدل‌ها</Button>
       </section>
       <section className="panel padded"><h2>شبیه‌ساز موجودی CVC</h2><p className="muted small">در پیش‌نمایش، موجودی از شبیه‌ساز می‌آید تا چرخه سالم → دوره ارفاق → صفر → ازسرگیری را بتوان آزمود. در حالت عملیاتی بدون CVC_PRIMARY_API_KEY، وضعیت «تأییدنشده» می‌ماند و درخواستی پذیرفته نمی‌شود.</p>
         <form className="form-stack" onSubmit={e => { e.preventDefault(); void run("simulate", "admin/provider/simulate", { balance: Number(balance), reason }); }}>
@@ -257,6 +257,7 @@ export function SystemOps() {
     { key: "graceMinutes", label: "دوره ارفاق موجودی صفر", unit: "دقیقه", hint: "صفر یعنی توقف فوری پذیرش درخواست." },
     { key: "lowBalanceCredits", label: "آستانه هشدار کمبود اعتبار مشتری", unit: "اعتبار", hint: "اعلان «اعتبار رو به اتمام» زیر این مقدار نمایش داده می‌شود." },
     { key: "maxKeys", label: "حداکثر کلید فعال هر حساب", unit: "کلید", hint: "" },
+    { key: "creditsPerCvcToken", label: "اعتبار به‌ازای هر توکن صورتحساب بالادست", unit: "اعتبار", hint: "ضریب تبدیل cost_tokens تأمین‌کننده به اعتبار داخلی پانا؛ پیش‌فرض ۱." },
   ];
   const invalid = fields.some(f => rangeError(values[f.key], { min: SYSTEM_LIMITS[f.key][0], max: SYSTEM_LIMITS[f.key][1], required: true }));
   return <div className="settings-layout">
