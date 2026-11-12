@@ -1,12 +1,25 @@
 import "server-only";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { and, asc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { ApiError } from "@/lib/server";
-import { allocateFefo, splitSettlement } from "@/lib/rules";
+import { allocateFefo, keyAllocationRemaining, splitSettlement, sumKeyAllocations, unallocatedCredits } from "@/lib/rules";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 const RESERVATION_TTL_MS = 5 * 60000;
+
+/** Soft-allocation snapshot: budgets earmark credits without debiting FEFO lots. */
+export async function walletAllocation(userId: string) {
+  const [lots, keys] = await Promise.all([
+    db.select({ remaining: s.lots.remaining, reserved: s.lots.reserved }).from(s.lots)
+      .where(and(eq(s.lots.userId, userId), gt(s.lots.expiresAt, new Date()))),
+    db.select({ budget: s.keys.budget, spent: s.keys.spent, enabled: s.keys.enabled }).from(s.keys)
+      .where(eq(s.keys.userId, userId)),
+  ]);
+  const available = lots.reduce((sum, lot) => sum + Math.max(0, lot.remaining - lot.reserved), 0);
+  const allocated = sumKeyAllocations(keys);
+  return { available, allocated, unallocated: unallocatedCredits(available, allocated) };
+}
 
 async function journalPair(tx: Tx, userId: string, eventId: string, delta: number, counter: string) {
   await tx.insert(s.journal).values([{ eventId, account: `customer:${userId}`, delta }, { eventId, account: counter, delta: -delta }]);
@@ -29,6 +42,22 @@ export async function reserve(input: { userId: string; keyId: string; requestId:
       if (key.spent + Number(held.total) + input.amount > key.budget) throw new ApiError("key_budget_exceeded", "بودجه باقی‌مانده این کلید برای سقف هزینه این درخواست کافی نیست.", 403);
     }
     const lots = await tx.select().from(s.lots).where(and(eq(s.lots.userId, input.userId), gt(s.lots.expiresAt, new Date()))).orderBy(asc(s.lots.expiresAt), asc(s.lots.id)).for("no key update");
+    // Unlimited keys may only spend the unallocated pool (wallet free of other keys' remaining budgets).
+    if (key.budget === null) {
+      const others = await tx.select({ budget: s.keys.budget, spent: s.keys.spent, enabled: s.keys.enabled })
+        .from(s.keys)
+        .where(and(eq(s.keys.userId, input.userId), eq(s.keys.enabled, true), ne(s.keys.id, key.id)));
+      const available = lots.reduce((sum, lot) => sum + Math.max(0, lot.remaining - lot.reserved), 0);
+      const allocatedOthers = others.reduce((sum, row) => sum + keyAllocationRemaining(row), 0);
+      const free = unallocatedCredits(available, allocatedOthers);
+      if (input.amount > free) {
+        throw new ApiError(
+          "unallocated_exceeded",
+          "اعتبار تخصیص‌نیافته برای این کلید بدون سقف کافی نیست. بودجه کلیدهای دیگر را کم کنید یا اعتبار بخرید.",
+          403,
+        );
+      }
+    }
     const allocations = allocateFefo(lots, input.amount);
     if (!allocations) throw new ApiError("insufficient_credits", "اعتبار کیف پول برای سقف هزینه این درخواست کافی نیست. اعتبار بخرید یا max_tokens را کمتر کنید.", 402);
     for (const a of allocations) await tx.update(s.lots).set({ reserved: sql`${s.lots.reserved} + ${a.amount}` }).where(eq(s.lots.id, a.lotId));

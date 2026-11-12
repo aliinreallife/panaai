@@ -43,4 +43,14 @@ assert.deepEqual(r.systemSettings({ 'system:transferHours': '999' }), r.SYSTEM_D
 assert.equal(r.resolveCvcTokenLimit(null, r.SYSTEM_DEFAULTS), r.SYSTEM_DEFAULTS.cvcDelegatedTokenCap);
 assert.equal(r.resolveCvcTokenLimit(1_000_000, r.SYSTEM_DEFAULTS), 1_000_000);
 assert.equal(r.resolveCvcTokenLimit(1e15, r.SYSTEM_DEFAULTS), r.SYSTEM_DEFAULTS.cvcDelegatedTokenCap);
-pass('refund proration, bounded system settings, and capped CVC token limits');
+assert.equal(r.resolveCvcTokenLimit(0, r.SYSTEM_DEFAULTS), 1);
+assert.equal(r.keyAllocationRemaining({ budget: 5_000_000, spent: 1_500_000, enabled: true }), 3_500_000);
+assert.equal(r.keyAllocationRemaining({ budget: null, spent: 100, enabled: true }), 0);
+assert.equal(r.sumKeyAllocations([
+  { budget: 5_000_000, spent: 1_000_000, enabled: true },
+  { budget: null, spent: 500_000, enabled: true },
+  { budget: 2_000_000, spent: 0, enabled: false },
+]), 4_000_000);
+assert.equal(r.unallocatedCredits(5_000_000, 4_000_000), 1_000_000);
+assert.equal(r.unallocatedCredits(3_000_000, 4_000_000), 0);
+pass('refund proration, bounded system settings, CVC caps, and soft key allocation');

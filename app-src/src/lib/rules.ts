@@ -215,16 +215,34 @@ export function systemSettings(settings: Record<string, unknown>): SystemSetting
 
 /**
  * Lifetime CVC `token_limit` for a delegated key.
- * Uses the PanaAI key budget when set; otherwise the platform safety cap.
- * Never returns null/unlimited — uncapped upstream keys are too risky.
+ * `creditPool` is the PanaAI key budget, or the wallet's unallocated credits when the key has no budget.
+ * Never returns unlimited — uncapped upstream keys are too risky.
  */
-export function resolveCvcTokenLimit(budgetCredits: number | null | undefined, settings: SystemSettings): number {
+export function resolveCvcTokenLimit(creditPool: number | null | undefined, settings: SystemSettings): number {
   const rate = Math.max(1, settings.creditsPerCvcToken);
   const platformCap = Math.max(1, settings.cvcDelegatedTokenCap);
-  if (budgetCredits != null && Number.isFinite(budgetCredits) && budgetCredits > 0) {
-    return Math.max(1, Math.min(platformCap, Math.floor(budgetCredits / rate)));
+  if (creditPool != null && Number.isFinite(creditPool)) {
+    if (creditPool <= 0) return 1;
+    return Math.max(1, Math.min(platformCap, Math.floor(creditPool / rate)));
   }
   return platformCap;
+}
+
+/** Remaining earmark for a limited key (0 if unlimited or revoked). */
+export function keyAllocationRemaining(key: { budget: number | null; spent: number; enabled?: boolean }): number {
+  if (key.enabled === false) return 0;
+  if (key.budget == null) return 0;
+  return Math.max(0, key.budget - key.spent);
+}
+
+/** Sum of remaining budgets across active limited keys. Unlimited keys allocate nothing. */
+export function sumKeyAllocations(keys: Array<{ budget: number | null; spent: number; enabled: boolean }>): number {
+  return keys.reduce((sum, key) => sum + keyAllocationRemaining(key), 0);
+}
+
+/** Credits still free for new key budgets or unlimited-key spend. */
+export function unallocatedCredits(available: number, allocated: number): number {
+  return Math.max(0, available - Math.max(0, allocated));
 }
 export function customerSystemSettings(settings: Record<string, unknown>): CustomerSystemSettings {
   const all = systemSettings(settings);

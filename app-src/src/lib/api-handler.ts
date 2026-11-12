@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { randomBytes, randomInt } from "node:crypto";
 import sharp from "sharp";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { getUsageReport, exportUsage, reportOptions } from "@/lib/analytics";
 import { ApiError, PRICING, createSandbox, dataFor, isDemo, decryptImage, encryptImage, getUser, limit, requireUser, sha, verifier, pricingFor } from "@/lib/server";
-import { isOperator } from "@/lib/rules";
+import { isOperator, sumKeyAllocations, systemSettings, unallocatedCredits } from "@/lib/rules";
 import { ascii } from "@/lib/shared";
-import { systemSettings } from "@/lib/rules";
 import { logger } from "@/lib/logger";
+import { walletAllocation } from "@/lib/wallet";
 
 type Context = { params: Promise<{ path: string[] }> };
 const uuid = z.string().uuid();
@@ -262,6 +262,15 @@ export async function handler(req: NextRequest, context: Context) {
       const catalog = await resolveModelCatalog(user.settings);
       const allowedIds = new Set(catalog.map(m => m.id));
       if (input.allowedModels.some(id => !allowedIds.has(id))) throw new ApiError("model_disabled", "یکی از مدل‌های انتخاب‌شده در فهرست فعال نیست.");
+      // Soft allocation: key budgets earmark wallet credits without debiting lots.
+      const pool = await walletAllocation(user.id);
+      if (input.budget != null && input.budget > pool.unallocated) {
+        throw new ApiError(
+          "allocation_exceeded",
+          `سقف بودجه نمی‌تواند از اعتبار تخصیص‌نیافته (${pool.unallocated.toLocaleString("fa-IR")}) بیشتر باشد.`,
+          409,
+        );
+      }
       // Live: ensure one capped CVC delegated key per wallet (never unlimited).
       // Rotate only changes the PanaAI secret — no new CVC key (cannot safely delete the old one yet).
       let upstreamProvisioned = false;
@@ -271,8 +280,9 @@ export async function handler(req: NextRequest, context: Context) {
         const { cvcConfig } = await import("@/lib/cvc");
         if (cvcConfig().primaryKey) {
           const { ensureUserUpstreamKey } = await import("@/lib/upstream-keys");
+          const creditPool = input.budget ?? pool.unallocated;
           const provisioned = await ensureUserUpstreamKey(user, {
-            budgetCredits: input.budget ?? null,
+            budgetCredits: creditPool,
             reason: "create",
           });
           upstreamProvisioned = true;
@@ -283,7 +293,7 @@ export async function handler(req: NextRequest, context: Context) {
             created: provisioned.created,
             prefix: provisioned.prefix,
             tokenLimit: provisioned.tokenLimit,
-            budgetCredits: input.budget ?? null,
+            creditPool,
           });
         } else {
           logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
@@ -297,7 +307,7 @@ export async function handler(req: NextRequest, context: Context) {
         const maxKeys = systemSettings(user.settings).maxKeys;
         if (existing.length >= maxKeys) throw new ApiError("key_limit", `حداکثر ${maxKeys.toLocaleString("fa-IR")} کلید فعال مجاز است.`);
         const [key] = await tx.insert(s.keys).values({ ...input, userId: user.id, prefix: secret.slice(0, 16), verifier: hash }).returning({ id: s.keys.id, name: s.keys.name, prefix: s.keys.prefix });
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit } });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit, allocated: pool.allocated, unallocated: pool.unallocated } });
         return key;
       });
       return success({ ...created, secret, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit }, 201);
@@ -343,6 +353,22 @@ export async function handler(req: NextRequest, context: Context) {
         if (!key || !key.enabled) throw new ApiError("key_revoked", "کلید لغو شده یا وجود ندارد.", 409);
         if (input.budget !== undefined && input.budget !== null && input.budget < key.spent) {
           throw new ApiError("budget_below_spent", "سقف بودجه نمی‌تواند از مصرف فعلی کلید کمتر باشد.");
+        }
+        if (input.budget !== undefined && input.budget !== null) {
+          const lots = await tx.select({ remaining: s.lots.remaining, reserved: s.lots.reserved }).from(s.lots)
+            .where(and(eq(s.lots.userId, user.id), gt(s.lots.expiresAt, new Date())));
+          const others = await tx.select({ budget: s.keys.budget, spent: s.keys.spent, enabled: s.keys.enabled, id: s.keys.id }).from(s.keys)
+            .where(and(eq(s.keys.userId, user.id), eq(s.keys.enabled, true)));
+          const available = lots.reduce((sum, lot) => sum + Math.max(0, lot.remaining - lot.reserved), 0);
+          const othersAllocated = sumKeyAllocations(others.filter(row => row.id !== key.id));
+          const freeForThis = unallocatedCredits(available, othersAllocated) + key.spent;
+          if (input.budget > freeForThis) {
+            throw new ApiError(
+              "allocation_exceeded",
+              `سقف بودجه نمی‌تواند از اعتبار قابل تخصیص به این کلید (${freeForThis.toLocaleString("fa-IR")}) بیشتر باشد.`,
+              409,
+            );
+          }
         }
         const patch = {
           ...(input.budget !== undefined ? { budget: input.budget } : {}),
