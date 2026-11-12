@@ -50,6 +50,8 @@ html[data-theme] .field-invalid input{border-color:var(--danger)!important;box-s
 .provider-disclosure.provider-ok{border-color:var(--border);background:var(--hover)}
 .provider-disclosure.provider-ok>svg,.provider-disclosure.provider-ok strong{color:var(--blue)}
 .session-gate-actions{margin-top:18px;flex-wrap:wrap}
+.destination-card .card-holder{margin:2px 0 0;font-size:var(--fs-sm);color:var(--text);font-weight:550}
+.mfa-steps em{font-style:normal;font-weight:500}
 .auth-gate{max-width:440px;margin:48px auto;padding:28px 26px}
 .auth-gate-brand{display:flex;justify-content:center;margin-bottom:18px}
 .auth-gate h1{font-size:var(--fs-xl);text-align:center;margin:0 0 8px}

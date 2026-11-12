@@ -24,7 +24,8 @@ export async function securityStatus(user: User) {
  * Server-side gate for every admin route.
  *  1. the route must map to a known permission (unknown routes are denied);
  *  2. the operator's role must grant it;
- *  3. every mutation additionally needs a session elevated with OTP (phone) + TOTP in the last 15 minutes.
+ *  3. every mutation needs a session elevated in the last 15 minutes
+ *     (phone OTP required; TOTP only if the admin has enrolled it).
  */
 export async function authorizeAdmin(user: User, route: string, method: string) {
   // Customers get the same answer as for a route that does not exist: the admin surface is invisible to them.
@@ -35,7 +36,7 @@ export async function authorizeAdmin(user: User, route: string, method: string) 
   if (!can(user.role, permission)) throw new ApiError("forbidden_role", `نقش «${ROLE_INFO[user.role as Role]?.label ?? user.role}» اجازه این عملیات را ندارد.`, 403);
   if (method === "GET") return;
   const session = await getSession();
-  if (!session?.elevatedUntil || session.elevatedUntil < new Date()) throw new ApiError("mfa_required", "برای عملیات مدیریتی، ابتدا با کد پیامکی و کد TOTP هویت خود را تأیید کنید.", 401);
+  if (!session?.elevatedUntil || session.elevatedUntil < new Date()) throw new ApiError("mfa_required", "برای عملیات مدیریتی، ابتدا هویت مدیر را با کد پیامکی تأیید کنید.", 401);
 }
 
 export async function enrollMfa(user: User) {
@@ -70,20 +71,25 @@ export async function confirmMfa(user: User, code: string) {
   await db.insert(s.audit).values({ userId: user.id, action: "admin.mfa_enabled" });
 }
 
-export async function elevate(user: User, code: string) {
+export async function elevate(user: User, code?: string) {
   if (!user.phone) throw new ApiError("otp_required", "ابتدا شماره موبایل را با کد یک‌بارمصرف تأیید کنید (مرحله اول ورود مدیر).", 409);
   const [mfa] = await db.select().from(s.adminMfa).where(eq(s.adminMfa.userId, user.id)).limit(1);
-  if (!mfa?.enabledAt) throw new ApiError("mfa_not_enrolled", "ابتدا TOTP را فعال کنید.", 409);
-  const result = await checkCode(user, code);
-  if (!result) {
-    await db.insert(s.audit).values({ userId: user.id, action: "admin.elevation_failed" });
-    throw new ApiError("invalid_totp", "کد TOTP نادرست، تکراری یا منقضی است.");
+  const factors = ["otp"] as string[];
+  // TOTP is optional until enrolled; once enabled it remains required for elevation.
+  if (mfa?.enabledAt) {
+    if (!code) throw new ApiError("totp_required", "این حساب TOTP فعال دارد؛ کد برنامه احراز هویت را وارد کنید.", 409);
+    const result = await checkCode(user, code);
+    if (!result) {
+      await db.insert(s.audit).values({ userId: user.id, action: "admin.elevation_failed" });
+      throw new ApiError("invalid_totp", "کد TOTP نادرست، تکراری یا منقضی است.");
+    }
+    factors.push("totp");
   }
   const session = await getSession();
   if (!session) throw new ApiError("unauthorized", "نشست یافت نشد.", 401);
   const until = new Date(Date.now() + ELEVATION_MINUTES * 60000);
   await db.update(s.sessions).set({ elevatedUntil: until }).where(eq(s.sessions.tokenHash, session.tokenHash));
-  await db.insert(s.audit).values({ userId: user.id, action: "admin.elevated", details: { until: until.toISOString(), factors: ["otp_demo", "totp"] } });
+  await db.insert(s.audit).values({ userId: user.id, action: "admin.elevated", details: { until: until.toISOString(), factors } });
   return until;
 }
 

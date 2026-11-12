@@ -243,7 +243,7 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     payments: await (async () => {
       const { formatCardNumber, readDestinationCard } = await import("@/lib/payments");
       const dest = await readDestinationCard();
-      return { destinationCard: dest.cardNumber, destinationCardFormatted: formatCardNumber(dest.cardNumber) };
+      return { destinationCard: dest.cardNumber, destinationCardFormatted: formatCardNumber(dest.cardNumber), cardHolder: dest.cardHolder };
     })(),
     ...(adminOrders ? { adminOrders } : {}),
     updatedAt: new Date().toISOString() };

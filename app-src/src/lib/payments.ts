@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 const KEY = "payments.destination";
 /** Temporary default destination card; change anytime from admin. */
 export const DEFAULT_DESTINATION_CARD = "6219861917179755";
+export const DEFAULT_CARD_HOLDER = "آرش مکی نیری";
 
 let tableReady: Promise<void> | null = null;
 async function ensurePlatformStateTable() {
@@ -42,24 +43,28 @@ export function assertValidCardNumber(raw: string) {
   return digits;
 }
 
-export async function readDestinationCard(): Promise<{ cardNumber: string; configured: boolean }> {
+export async function readDestinationCard(): Promise<{ cardNumber: string; cardHolder: string; configured: boolean }> {
   try {
     await ensurePlatformStateTable();
     const [row] = await db.select().from(s.platformState).where(eq(s.platformState.key, KEY)).limit(1);
     const stored = typeof row?.value?.cardNumber === "string" ? normalizeCardNumber(row.value.cardNumber) : "";
-    if (/^\d{16,19}$/.test(stored)) return { cardNumber: stored, configured: true };
+    const holder = typeof row?.value?.cardHolder === "string" && row.value.cardHolder.trim()
+      ? row.value.cardHolder.trim().slice(0, 80)
+      : DEFAULT_CARD_HOLDER;
+    if (/^\d{16,19}$/.test(stored)) return { cardNumber: stored, cardHolder: holder, configured: true };
   } catch (error) {
     logger.warn("payments.destination_read_failed", { error });
   }
-  return { cardNumber: DEFAULT_DESTINATION_CARD, configured: true };
+  return { cardNumber: DEFAULT_DESTINATION_CARD, cardHolder: DEFAULT_CARD_HOLDER, configured: true };
 }
 
-export async function writeDestinationCard(raw: string) {
+export async function writeDestinationCard(raw: string, cardHolder = DEFAULT_CARD_HOLDER) {
   const cardNumber = assertValidCardNumber(raw);
+  const holder = cardHolder.trim().slice(0, 80) || DEFAULT_CARD_HOLDER;
   await ensurePlatformStateTable();
-  const value = { cardNumber, updatedAt: new Date().toISOString() };
+  const value = { cardNumber, cardHolder: holder, updatedAt: new Date().toISOString() };
   const now = new Date();
   await db.insert(s.platformState).values({ key: KEY, value, updatedAt: now })
     .onConflictDoUpdate({ target: s.platformState.key, set: { value, updatedAt: now } });
-  return { cardNumber, configured: true };
+  return { cardNumber, cardHolder: holder, configured: true };
 }

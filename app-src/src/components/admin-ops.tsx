@@ -44,7 +44,7 @@ function AdminGateBar({ now }: { now: number }) {
   const left = elevated ? Math.max(0, Math.floor((new Date(security.elevatedUntil!).getTime() - now) / 1000)) : 0;
   return <div className={`admin-gate ${elevated ? "admin-gate-ok" : ""}`} role="status">
     <span className="admin-gate-icon"><Icon name={elevated ? "secure" : "lock"} size={22} /></span>
-    <div><strong>{elevated ? "نشست مدیریتی تأییدشده" : "عملیات مدیریتی قفل است"}</strong><span>نقش: {security.roleLabel} · پیامک (آزمایشی): {security.otpVerified ? "تأییدشده" : "تأیید نشده"} · TOTP: {security.mfaEnrolled ? "فعال" : "فعال نشده"}{elevated ? ` · ${fa(Math.floor(left / 60))}:${fa(String(left % 60).padStart(2, "0"))} تا پایان` : ""}</span></div>
+    <div><strong>{elevated ? "نشست مدیریتی تأییدشده" : "عملیات مدیریتی قفل است"}</strong><span>نقش: {security.roleLabel} · پیامک: {security.otpVerified ? "تأییدشده" : "تأیید نشده"} · TOTP: {security.mfaEnrolled ? "فعال" : "اختیاری"}{elevated ? ` · ${fa(Math.floor(left / 60))}:${fa(String(left % 60).padStart(2, "0"))} تا پایان` : ""}</span></div>
     {elevated
       ? <Button tone="secondary" className="btn-small" onClick={async () => { try { await api("admin/mfa/drop", { method: "POST" }); await reload(); notify("نشست مدیریتی قفل شد.", "info"); } catch (e) { notify((e as Error).message, "error"); } }}><Icon name="lock" size={15} />قفل کردن</Button>
       : <Button className="btn-small" onClick={requireElevation}><Icon name="secure" size={15} />تأیید هویت مدیر</Button>}
@@ -53,30 +53,41 @@ function AdminGateBar({ now }: { now: number }) {
 
 function ElevationModal({ onClose }: { onClose: () => void }) {
   const { security, reload } = useAdminSecurity(); const { notify } = useApp();
-  const [enroll, setEnroll] = useState<{ secret: string; uri: string } | null>(null); const [code, setCode] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [demo, setDemo] = useState<{ code: string; expiresIn: number } | null>(null);
+  const [enroll, setEnroll] = useState<{ secret: string; uri: string } | null>(null); const [code, setCode] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [demo, setDemo] = useState<{ code: string; expiresIn: number } | null>(null); const [showTotpSetup, setShowTotpSetup] = useState(false);
   if (!security) return null;
-  const step = !security.otpVerified ? 1 : !security.mfaEnrolled ? 2 : 3;
+  const needsTotp = security.mfaEnrolled;
   const run = async (fn: () => Promise<void>) => { setBusy(true); setError(""); try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } };
   const showDemo = () => run(async () => setDemo(await api<{ code: string; expiresIn: number }>("admin/mfa/demo-code")));
-  return <Modal title="تأیید هویت مدیر" description="ورود مدیر = کد پیامکی + کد TOTP؛ اعتبار نشست ۱۵ دقیقه" onClose={onClose}>
+  const elevateNow = async (totpCode?: string) => {
+    await api("admin/mfa/elevate", { method: "POST", body: totpCode ? { code: totpCode } : {} });
+    await reload(); notify("نشست مدیریتی برای ۱۵ دقیقه باز شد."); onClose();
+  };
+  return <Modal title="تأیید هویت مدیر" description="ورود مدیر با کد پیامکی؛ TOTP فعلاً اختیاری است · اعتبار نشست ۱۵ دقیقه" onClose={onClose}>
     <ol className="mfa-steps">
-      <li className={step > 1 ? "done" : "current"}><strong>۱. کد پیامکی (OTP)</strong><span>{security.otpVerified ? "شماره موبایل با کد یک‌بارمصرف تأیید شده است." : "ابتدا از منوی حساب، ورود با موبایل را انجام دهید. با پیکربندی کاوه‌نگار پیامک واقعی ارسال می‌شود."}</span></li>
-      <li className={step > 2 ? "done" : step === 2 ? "current" : ""}><strong>۲. فعال‌سازی TOTP</strong><span>{security.mfaEnrolled ? "برنامه احراز هویت متصل است." : "کلید را در Google Authenticator، Authy یا هر برنامه TOTP وارد کنید."}</span></li>
-      <li className={step === 3 ? "current" : ""}><strong>۳. کد TOTP فعلی</strong><span>هر کد فقط یک‌بار پذیرفته می‌شود؛ پنج تلاش ناموفق TOTP را قفل می‌کند.</span></li>
+      <li className={security.otpVerified ? "done" : "current"}><strong>۱. کد پیامکی (OTP)</strong><span>{security.otpVerified ? "شماره موبایل با کد یک‌بارمصرف تأیید شده است." : "ابتدا از منوی حساب، ورود با موبایل را انجام دهید. با پیکربندی کاوه‌نگار پیامک واقعی ارسال می‌شود."}</span></li>
+      <li className={needsTotp || showTotpSetup ? (needsTotp ? "done" : "current") : ""}><strong>۲. فعال‌سازی TOTP <em className="muted">(اختیاری)</em></strong><span>{needsTotp ? "برنامه احراز هویت متصل است." : "می‌توانید بعداً فعال کنید؛ فعلاً برای باز کردن نشست لازم نیست."}</span></li>
+      {needsTotp && <li className="current"><strong>۳. کد TOTP فعلی</strong><span>چون TOTP فعال است، کد برنامه احراز هویت لازم است.</span></li>}
     </ol>
-    {step === 2 && (!enroll
-      ? <Button busy={busy} onClick={() => run(async () => setEnroll(await api<{ secret: string; uri: string }>("admin/mfa/enroll", { method: "POST" })))}><Icon name="keys" size={16} />ساخت کلید TOTP</Button>
+    {security.otpVerified && !needsTotp && !showTotpSetup && <>
+      <div className="button-row" style={{ marginTop: 12 }}>
+        <Button busy={busy} onClick={() => void run(() => elevateNow())}><Icon name="secure" size={16} />باز کردن نشست مدیریتی</Button>
+        <Button tone="secondary" disabled={busy} onClick={() => setShowTotpSetup(true)}><Icon name="keys" size={16} />فعال‌سازی اختیاری TOTP</Button>
+      </div>
+      {error && <div className="form-error" role="alert">{error}</div>}
+    </>}
+    {security.otpVerified && !needsTotp && showTotpSetup && (!enroll
+      ? <div className="button-row"><Button busy={busy} onClick={() => run(async () => setEnroll(await api<{ secret: string; uri: string }>("admin/mfa/enroll", { method: "POST" })))}><Icon name="keys" size={16} />ساخت کلید TOTP</Button><Button tone="ghost" disabled={busy} onClick={() => setShowTotpSetup(false)}>انصراف</Button></div>
       : <div className="form-stack"><div className="secret-code"><code dir="ltr">{enroll.secret.replace(/(.{4})/g, "$1 ").trim()}</code><CopyButton value={enroll.secret} label="کپی کلید" /></div><details><summary className="muted small">نشانی otpauth برای برنامه‌های سازگار</summary><code className="audit-json" dir="ltr">{enroll.uri}</code></details></div>)}
-    {step >= 2 && (step === 3 || enroll) && <form className="form-stack" onSubmit={e => { e.preventDefault(); void run(async () => {
-      if (step === 2) { await api("admin/mfa/confirm", { body: { code } }); notify("TOTP فعال شد. برای باز کردن نشست، کد بعدی را وارد کنید.", "info"); setCode(""); setDemo(null); await reload(); }
-      else { await api("admin/mfa/elevate", { body: { code } }); await reload(); notify("نشست مدیریتی برای ۱۵ دقیقه باز شد."); onClose(); }
+    {(needsTotp || enroll) && <form className="form-stack" onSubmit={e => { e.preventDefault(); void run(async () => {
+      if (!needsTotp && enroll) { await api("admin/mfa/confirm", { body: { code } }); notify("TOTP فعال شد. برای باز کردن نشست، کد بعدی را وارد کنید.", "info"); setCode(""); setDemo(null); await reload(); }
+      else { await elevateNow(code); }
     }); }}>
       <label className="field">کد ۶ رقمی برنامه احراز هویت<input dir="ltr" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/\D/g, ""))} placeholder="------" required /></label>
-      {security.demo && <div className="demo-otp"><span>برنامه احراز هویت ندارید؟</span>{demo ? <><strong dir="ltr">{demo.code}</strong><span>کد آزمایشی · {fa(demo.expiresIn)} ثانیه</span></> : <button type="button" className="text-link" onClick={showDemo}>نمایش کد آزمایشی</button>}</div>}
+      {security.demo && needsTotp && <div className="demo-otp"><span>برنامه احراز هویت ندارید؟</span>{demo ? <><strong dir="ltr">{demo.code}</strong><span>کد آزمایشی · {fa(demo.expiresIn)} ثانیه</span></> : <button type="button" className="text-link" onClick={showDemo}>نمایش کد آزمایشی</button>}</div>}
       {error && <div className="form-error" role="alert">{error}</div>}
-      <Button type="submit" busy={busy} disabled={code.length !== 6}>{step === 2 ? "تأیید و فعال‌سازی TOTP" : "باز کردن نشست مدیریتی"}</Button>
+      <Button type="submit" busy={busy} disabled={code.length !== 6}>{needsTotp ? "باز کردن نشست مدیریتی" : "تأیید و فعال‌سازی TOTP"}</Button>
     </form>}
-    {step === 1 && <Notice tone="warning">بدون تأیید شماره موبایل، نشست مدیریتی باز نمی‌شود.</Notice>}
+    {!security.otpVerified && <Notice tone="warning">بدون تأیید شماره موبایل، نشست مدیریتی باز نمی‌شود.</Notice>}
   </Modal>;
 }
 
@@ -253,6 +264,7 @@ export function SystemOps() {
     (Object.keys(SYSTEM_DEFAULTS) as (keyof typeof SYSTEM_DEFAULTS)[]).map((k) => [k, String((data.system as Record<string, number>)[k] ?? SYSTEM_DEFAULTS[k])])
   ) as Record<keyof typeof SYSTEM_LIMITS, string>);
   const [cardNumber, setCardNumber] = useState(data.payments?.destinationCard || "");
+  const [cardHolder, setCardHolder] = useState(data.payments?.cardHolder || "آرش مکی نیری");
   const [cardReason, setCardReason] = useState("");
   const [reason, setReason] = useState(""); const [busy, setBusy] = useState(""); const [error, setError] = useState("");
   const manage = allowed("system.manage");
@@ -273,11 +285,12 @@ export function SystemOps() {
   const cardInvalid = !/^\d{16,19}$/.test(cardDigits);
   return <div className="settings-layout">
     <section className="panel padded"><div className="section-title"><h2>کارت مقصد واریز</h2><Badge tone="warning">قابل تغییر</Badge></div>
-      <form className="form-stack" onSubmit={e => { e.preventDefault(); setBusy("card"); setError(""); void act(async () => { const saved = await api<{ cardNumber: string; formatted: string }>("admin/payments/destination", { method: "PUT", body: { cardNumber: cardDigits, reason: cardReason } }); setCardNumber(saved.cardNumber); await refresh(); setCardReason(""); notify("کارت مقصد به‌روز شد."); }, setError).finally(() => setBusy("")); }}>
+      <form className="form-stack" onSubmit={e => { e.preventDefault(); setBusy("card"); setError(""); void act(async () => { const saved = await api<{ cardNumber: string; cardHolder: string; formatted: string }>("admin/payments/destination", { method: "PUT", body: { cardNumber: cardDigits, cardHolder: cardHolder.trim(), reason: cardReason } }); setCardNumber(saved.cardNumber); setCardHolder(saved.cardHolder); await refresh(); setCardReason(""); notify("کارت مقصد به‌روز شد."); }, setError).finally(() => setBusy("")); }}>
         <label className="field">شماره کارت مقصد<input dir="ltr" inputMode="numeric" autoComplete="off" value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="6219…" maxLength={23} required disabled={!manage} /><span className="field-hint">پیش‌فرض فعلی قابل ویرایش است؛ در صفحه خرید به مشتری نشان داده می‌شود.</span></label>
+        <label className="field">نام صاحب کارت<input value={cardHolder} onChange={e => setCardHolder(e.target.value)} maxLength={80} required disabled={!manage} /><span className="field-hint">روی صفحه واریز به مشتری نمایش داده می‌شود.</span></label>
         <label className="field">دلیل تغییر<textarea rows={2} value={cardReason} onChange={e => setCardReason(e.target.value)} minLength={10} maxLength={1000} required disabled={!manage} /></label>
         {error && busy === "card" && <div className="form-error" role="alert">{error}</div>}
-        <Button type="submit" busy={busy === "card"} disabled={!manage || cardInvalid || cardReason.trim().length < 10}>ذخیره کارت مقصد</Button>
+        <Button type="submit" busy={busy === "card"} disabled={!manage || cardInvalid || cardHolder.trim().length < 2 || cardReason.trim().length < 10}>ذخیره کارت مقصد</Button>
       </form>
     </section>
     <section className="panel padded"><div className="section-title"><h2>تنظیمات سیستم</h2><Badge tone="warning">حسابرسی‌شده</Badge></div>

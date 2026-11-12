@@ -68,7 +68,11 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   }
   if (route === "admin/mfa/enroll" && m === "POST") return ok(await enrollMfa(user));
   if (route === "admin/mfa/confirm" && m === "POST") { await confirmMfa(user, z.object({ code: z.string().regex(/^\d{6}$/) }).parse(await body()).code); return ok(); }
-  if (route === "admin/mfa/elevate" && m === "POST") return ok({ elevatedUntil: (await elevate(user, z.object({ code: z.string().regex(/^\d{6}$/) }).parse(await body()).code)).toISOString() });
+  if (route === "admin/mfa/elevate" && m === "POST") {
+    const raw = await body().catch(() => ({}));
+    const input = z.object({ code: z.string().regex(/^\d{6}$/).optional() }).parse(raw && typeof raw === "object" ? raw : {});
+    return ok({ elevatedUntil: (await elevate(user, input.code)).toISOString() });
+  }
   if (route === "admin/mfa/drop" && m === "POST") { await dropElevation(user); return ok(); }
   if (route === "admin/mfa/demo-code" && m === "GET") return ok(await demoTotp(user));
   if (route === "admin/role" && m === "POST") {
@@ -222,10 +226,10 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
     return ok({ ...dest, formatted: formatCardNumber(dest.cardNumber) });
   }
   if (route === "admin/payments/destination" && m === "PUT") {
-    const input = z.object({ cardNumber: z.string().min(16).max(32), reason }).parse(await body());
+    const input = z.object({ cardNumber: z.string().min(16).max(32), cardHolder: z.string().trim().min(2).max(80).optional(), reason }).parse(await body());
     const { formatCardNumber, writeDestinationCard } = await import("@/lib/payments");
-    const dest = await writeDestinationCard(input.cardNumber);
-    await db.insert(s.audit).values({ userId: user.id, action: "payments.destination_updated", details: { cardLast4: dest.cardNumber.slice(-4), reason: input.reason } });
+    const dest = await writeDestinationCard(input.cardNumber, input.cardHolder);
+    await db.insert(s.audit).values({ userId: user.id, action: "payments.destination_updated", details: { cardLast4: dest.cardNumber.slice(-4), cardHolder: dest.cardHolder, reason: input.reason } });
     return ok({ ...dest, formatted: formatCardNumber(dest.cardNumber) });
   }
 
