@@ -69,7 +69,13 @@ assert.equal(audit.data.ok, true, JSON.stringify(audit.data.findings?.filter(f =
 assert.equal(audit.data.buckets.keySpentTotal, audit.data.buckets.usageCreditsTotal);
 assert.ok(audit.data.buckets.unallocated === Math.max(0, audit.data.buckets.available - audit.data.buckets.allocated));
 assert.ok(Array.isArray(audit.data.findings));
-pass(`financial audit: buckets ok (avail=${audit.data.buckets.available} alloc=${audit.data.buckets.allocated} free=${audit.data.buckets.unallocated})`);
+assert.ok(Array.isArray(audit.data.bucketStatus) && audit.data.bucketStatus.length >= 6);
+assert.ok(audit.data.bucketStatus.every(b => b.ok), JSON.stringify(audit.data.bucketStatus.filter(b => !b.ok)));
+assert.equal(audit.data.identity.spentEqualsUsage, true);
+assert.equal(audit.data.identity.softAllocHolds, true);
+assert.equal(audit.data.identity.ordersMatchLots, true);
+assert.equal(audit.data.identity.journalBalanced, true);
+pass(`financial audit: buckets ok (avail=${audit.data.buckets.available} alloc=${audit.data.buckets.allocated} free=${audit.data.buckets.unallocated}; fishy=${audit.data.fishy})`);
 await api('admin/wallet/adjust', { amount: 50000000, reason });
 
 // ---- Provider state machine: grace → zero → resuming → healthy

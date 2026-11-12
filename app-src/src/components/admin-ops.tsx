@@ -228,41 +228,67 @@ export function ReconcilePanel() {
   </section>;
 }
 
-type AuditFinding = { code: string; severity: "error" | "warn" | "info"; message: string; context?: Record<string, unknown> };
+type AuditFinding = { code: string; severity: "error" | "warn" | "info"; bucket: string; message: string; context?: Record<string, unknown> };
+type BucketStatus = {
+  id: string; label: string; purpose: string; ok: boolean; severity: "error" | "warn" | "info" | "ok"; summary: string;
+  figures: { label: string; value: number; highlight?: boolean }[];
+};
 type FinancialAudit = {
   checkedAt: string;
   ok: boolean;
+  fishy: boolean;
   buckets: { available: number; reserved: number; allocated: number; unallocated: number; keySpentTotal: number; usageCreditsTotal: number };
+  bucketStatus: BucketStatus[];
+  identity: Record<string, boolean>;
   findings: AuditFinding[];
-  counts: { activeKeys: number; budgetedKeys: number; uncappedKeys: number; upstreamShared: number; upstreamCapped: number; approvedOrders: number };
+  counts: { activeKeys: number; budgetedKeys: number; uncappedKeys: number; upstreamShared: number; upstreamCapped: number; approvedOrders: number; refunds: number };
   walletReconcile: Recon;
 };
-const severityTone = (s: AuditFinding["severity"]) => s === "error" ? "danger" as const : s === "warn" ? "warning" as const : "info" as const;
-const severityLabel = (s: AuditFinding["severity"]) => s === "error" ? "خطا" : s === "warn" ? "هشدار" : "اطلاع";
-/** Cross-bucket financial integrity check. Does not auto-fix balances. */
+const severityTone = (s: AuditFinding["severity"] | BucketStatus["severity"]) => s === "error" ? "danger" as const : s === "warn" ? "warning" as const : s === "ok" || s === "info" ? (s === "ok" ? "success" as const : "info" as const) : "info" as const;
+const severityLabel = (s: AuditFinding["severity"]) => s === "error" ? "مشکوک / خطا" : s === "warn" ? "هشدار" : "اطلاع";
+const bucketBadge = (b: BucketStatus) => b.ok ? (b.severity === "warn" ? "هشدار" : "سالم") : "مغایرت";
+/** Cross-bucket financial integrity check. Fishy mismatches must be obvious. Does not auto-fix. */
 export function FinancialAuditPanel() {
-  const { refresh } = useApp(); const { act, allowed } = useAdminSecurity();
+  const { refresh, notify } = useApp(); const { act, allowed } = useAdminSecurity();
   const [report, setReport] = useState<FinancialAudit | null>(null); const [busy, setBusy] = useState(false);
   const errors = report?.findings.filter(f => f.severity === "error") ?? [];
   const warns = report?.findings.filter(f => f.severity === "warn") ?? [];
   const infos = report?.findings.filter(f => f.severity === "info") ?? [];
-  return <section className="panel padded"><div className="section-title"><div><h2>حسابرسی مالی سطل‌ها</h2><p>بررسی جداگانهٔ موجودی بسته، تخصیص نرم کلید، مصرف/usage، سفارش↔بسته، و شکل اعتبارنامه CVC. فقط رزروهای کهنه آزاد می‌شود؛ هیچ موجودی‌ای خودکار اصلاح نمی‌شود.</p></div><Button tone="secondary" busy={busy} disabled={!allowed("finance.adjust")} onClick={() => { setBusy(true); void act(async () => { setReport(await api<FinancialAudit>("admin/wallet/financial-audit", { method: "POST" })); await refresh(); }).finally(() => setBusy(false)); }}><Icon name="secure" size={16} />اجرای حسابرسی مالی</Button></div>
+  const fishyFindings = [...errors, ...warns];
+  const run = () => {
+    setBusy(true);
+    void act(async () => {
+      const next = await api<FinancialAudit>("admin/wallet/financial-audit", { method: "POST" });
+      setReport(next);
+      await refresh();
+      if (!next.ok) notify(`حسابرسی: ${fa(next.findings.filter(f => f.severity === "error").length)} مغایرت مشکوک پیدا شد.`, "error");
+      else if (next.fishy) notify("حسابرسی بدون خطای سخت؛ هشدارهایی برای بررسی دارید.", "info");
+      else notify("حسابرسی مالی: همه سطل‌های جدا از هم هم‌خوان‌اند.");
+    }).finally(() => setBusy(false));
+  };
+  return <section className="panel padded"><div className="section-title"><div><h2>حسابرسی مالی سطل‌ها</h2><p>هر سطل جدا چک می‌شود. اگر چیزی مشکوک باشد ردیف همان سطل قرمز/هشدار می‌شود — موجودی خودکار اصلاح نمی‌شود.</p></div><Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}><Icon name="secure" size={16} />اجرای حسابرسی مالی</Button></div>
     {report ? <>
-      <Notice tone={report.ok ? (warns.length ? "warning" : "success") : "warning"} title={report.ok ? (warns.length ? "بدون خطای سخت؛ هشدار دارد" : "سطل‌ها هم‌خوان‌اند") : "مغایرت مالی پیدا شد"}>
-        {fa(errors.length)} خطا · {fa(warns.length)} هشدار · {fa(infos.length)} اطلاع · {persianTime(report.checkedAt)}
+      <Notice tone={!report.ok ? "danger" : report.fishy ? "warning" : "success"} title={!report.ok ? "چیز مشکوکی پیدا شد — سطل‌ها جور نیستند" : report.fishy ? "سطل‌ها بدون خطای سخت‌اند؛ هشدار دارند" : "سطل‌های جدا هم‌خوان‌اند"}>
+        {fa(errors.length)} مغایرت · {fa(warns.length)} هشدار · {fa(infos.length)} اطلاع · {persianTime(report.checkedAt)}
+        {!report.ok && <span className="cell-subtitle">تا اصلاح حسابرسی‌شده، به این اعداد برای تسویه اعتماد نکنید.</span>}
       </Notice>
-      <dl className="detail-list finance-list">
-        <div><dt>موجودی قابل‌مصرف</dt><dd>{fa(report.buckets.available)}</dd></div>
-        <div><dt>رزرو فعال</dt><dd>{fa(report.buckets.reserved)}</dd></div>
-        <div><dt>تخصیص نرم کلیدها</dt><dd>{fa(report.buckets.allocated)}</dd></div>
-        <div><dt>اعتبار آزاد</dt><dd>{fa(report.buckets.unallocated)}</dd></div>
-        <div><dt>جمع spent کلیدها</dt><dd>{fa(report.buckets.keySpentTotal)}</dd></div>
-        <div><dt>جمع usage</dt><dd>{fa(report.buckets.usageCreditsTotal)}</dd></div>
-        <div><dt>کلید فعال / بودجه‌دار / بدون‌سقف</dt><dd>{fa(report.counts.activeKeys)} / {fa(report.counts.budgetedKeys)} / {fa(report.counts.uncappedKeys)}</dd></div>
-        <div><dt>CVC مشترک / بودجه‌دار</dt><dd>{fa(report.counts.upstreamShared)} / {fa(report.counts.upstreamCapped)}</dd></div>
-      </dl>
-      {report.findings.length ? <div className="form-stack">{report.findings.map((f, i) => <Notice key={`${f.code}-${i}`} tone={severityTone(f.severity)} title={`${severityLabel(f.severity)} · ${f.code}`}>{f.message}{f.context ? <pre className="audit-json" dir="ltr">{JSON.stringify(f.context, null, 2)}</pre> : null}</Notice>)}</div> : <p className="muted small">یافته‌ای ثبت نشد.</p>}
-    </> : <p className="muted small">برای اطمینان از جدا ماندن سطل‌های مالی (موجودی، تخصیص، ژورنال، CVC) حسابرسی را اجرا کنید. نتیجه در رویداد finance.audited ثبت می‌شود.</p>}
+      <div className="table-scroll"><table><thead><tr><th>سطل</th><th>وضعیت</th><th>اعداد کنار هم</th><th>نتیجه</th></tr></thead><tbody>
+        {(report.bucketStatus || []).map(b => <tr key={b.id} className={!b.ok ? "row-danger" : b.severity === "warn" ? "row-warn" : undefined}>
+          <td><strong>{b.label}</strong><span className="cell-subtitle">{b.purpose}</span></td>
+          <td><Badge tone={!b.ok ? "danger" : b.severity === "warn" ? "warning" : "success"}>{bucketBadge(b)}</Badge></td>
+          <td>{b.figures.map(f => <span key={f.label} className={`cell-main${f.highlight ? " warning-text" : ""}`}>{f.label}: <strong>{fa(f.value)}</strong></span>)}</td>
+          <td className={!b.ok ? "warning-text" : "muted"}>{b.summary}</td>
+        </tr>)}
+      </tbody></table></div>
+      {fishyFindings.length ? <div className="form-stack" style={{ marginTop: "1rem" }}>
+        <div className="section-title"><h3>یافته‌های مشکوک / هشدار</h3><Badge tone={errors.length ? "danger" : "warning"}>{fa(fishyFindings.length)}</Badge></div>
+        {fishyFindings.map((f, i) => <Notice key={`${f.code}-${i}`} tone={severityTone(f.severity)} title={`${severityLabel(f.severity)} · ${f.code}`}>
+          <strong>{f.message}</strong>
+          {f.context ? <pre className="audit-json" dir="ltr">{JSON.stringify(f.context, null, 2)}</pre> : null}
+        </Notice>)}
+      </div> : <p className="muted small" style={{ marginTop: "0.75rem" }}>هیچ مغایرت یا هشداری نیست. سطل‌ها از هم جدا و هم‌خوان‌اند.</p>}
+      {infos.length > 0 && <details style={{ marginTop: "0.75rem" }}><summary className="muted small">{fa(infos.length)} اطلاع (مثلاً CVC هنوز mint نشده)</summary><div className="form-stack" style={{ marginTop: "0.5rem" }}>{infos.map((f, i) => <Notice key={`info-${f.code}-${i}`} tone="info" title={f.code}>{f.message}</Notice>)}</div></details>}
+    </> : <p className="muted small">برای دیدن وضعیت هر سطل (موجودی/تخصیص، مصرف، بسته‌ها، ژورنال، سفارش، بازپرداخت، CVC) حسابرسی را اجرا کنید. نتیجه در finance.audited ثبت می‌شود.</p>}
   </section>;
 }
 
