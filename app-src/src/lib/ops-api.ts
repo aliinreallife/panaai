@@ -4,7 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { ApiError, PRICING, pricingFor, sandboxOnly } from "@/lib/server";
+import { ApiError, PRICING, isDemo, pricingFor, sandboxOnly } from "@/lib/server";
 import { authorizeAdmin, confirmMfa, demoTotp, dropElevation, elevate, enrollMfa, securityStatus } from "@/lib/security";
 import { channelConfig, evaluateProvider, listAlerts, raiseAlert } from "@/lib/provider";
 import { adjust, reconcile, reverseForRefund } from "@/lib/wallet";
@@ -148,7 +148,12 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   if (route === "admin/wallet/reconcile" && m === "POST") return ok(await reconcile(user.id));
   if (route === "admin/wallet/adjust" && m === "POST") {
     const input = z.object({ amount: z.number().int().refine(v => v !== 0 && Math.abs(v) <= 10000000000), reason }).parse(await body());
-    return ok(await adjust(user.id, input.amount, input.reason, PRICING.validityDays));
+    const result = await adjust(user.id, input.amount, input.reason, PRICING.validityDays);
+    if (!isDemo) {
+      const { syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+      await syncUpstreamTokenLimitSafe(user, "wallet_topup");
+    }
+    return ok(result);
   }
 
   /* ---- refunds ---- */

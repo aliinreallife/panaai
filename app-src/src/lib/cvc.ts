@@ -287,3 +287,43 @@ export async function createDelegatedKey(
     return { ok: false, status: 0, source: "cvc_unreachable", code: "network_error" };
   }
 }
+
+/**
+ * Control-plane helper: edit an owned delegated key (allowance / models / freeze / delete).
+ * Never combine delete with other mutations.
+ */
+export async function editDelegatedKey(
+  input: {
+    key: string;
+    additional_tokens?: number;
+    token_limit?: number;
+    allowed_models?: string[];
+    active?: boolean;
+    delete?: true;
+  },
+  cfg: CvcConfig = cvcConfig(),
+): Promise<CvcFetchResult<{ meta: Record<string, unknown>; status?: string }>> {
+  if (!cfg.primaryKey) return { ok: false, status: 0, source: "not_configured", code: "primary_not_configured" };
+  try {
+    const { status, body } = await cvcFetchJson(`${cfg.baseUrl}/v1/keys/edit`, cfg.primaryKey, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (status < 200 || status >= 300) {
+      return { ok: false, status, source: "cvc_keys_edit", code: errorCode(body) ?? "http_error", message: errorMessage(body) };
+    }
+    const row = (body && typeof body === "object" ? body : {}) as { meta?: unknown; status?: unknown };
+    return {
+      ok: true,
+      status,
+      data: {
+        meta: row.meta && typeof row.meta === "object" ? row.meta as Record<string, unknown> : {},
+        status: typeof row.status === "string" ? row.status : undefined,
+      },
+      source: "cvc_keys_edit",
+    };
+  } catch {
+    return { ok: false, status: 0, source: "cvc_unreachable", code: "network_error" };
+  }
+}

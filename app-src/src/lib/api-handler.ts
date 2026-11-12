@@ -271,34 +271,6 @@ export async function handler(req: NextRequest, context: Context) {
           409,
         );
       }
-      // Live: ensure one capped CVC delegated key per wallet (never unlimited).
-      // Rotate only changes the PanaAI secret — no new CVC key (cannot safely delete the old one yet).
-      let upstreamProvisioned = false;
-      let upstreamPrefix: string | null = null;
-      let upstreamTokenLimit: number | null = null;
-      if (!isDemo) {
-        const { cvcConfig } = await import("@/lib/cvc");
-        if (cvcConfig().primaryKey) {
-          const { ensureUserUpstreamKey } = await import("@/lib/upstream-keys");
-          const creditPool = input.budget ?? pool.unallocated;
-          const provisioned = await ensureUserUpstreamKey(user, {
-            budgetCredits: creditPool,
-            reason: "create",
-          });
-          upstreamProvisioned = true;
-          upstreamPrefix = provisioned.prefix;
-          upstreamTokenLimit = provisioned.tokenLimit;
-          logger.info("upstream_key.ready_on_platform_key_create", {
-            userId: user.id,
-            created: provisioned.created,
-            prefix: provisioned.prefix,
-            tokenLimit: provisioned.tokenLimit,
-            creditPool,
-          });
-        } else {
-          logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
-        }
-      }
       const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const created = await db.transaction(async tx => {
@@ -307,32 +279,71 @@ export async function handler(req: NextRequest, context: Context) {
         const maxKeys = systemSettings(user.settings).maxKeys;
         if (existing.length >= maxKeys) throw new ApiError("key_limit", `حداکثر ${maxKeys.toLocaleString("fa-IR")} کلید فعال مجاز است.`);
         const [key] = await tx.insert(s.keys).values({ ...input, userId: user.id, prefix: secret.slice(0, 16), verifier: hash }).returning({ id: s.keys.id, name: s.keys.name, prefix: s.keys.prefix });
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit, allocated: pool.allocated, unallocated: pool.unallocated } });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, allocated: pool.allocated, unallocated: pool.unallocated } });
         return key;
       });
-      return success({ ...created, secret, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit }, 201);
+      // Capped key → own CVC key. Uncapped keys → one shared CVC per user.
+      let upstreamProvisioned = false;
+      let upstreamPrefix: string | null = null;
+      let upstreamTokenLimit: number | null = null;
+      let upstreamKind: string | null = null;
+      if (!isDemo) {
+        const { cvcConfig } = await import("@/lib/cvc");
+        if (cvcConfig().primaryKey) {
+          const { ensureUpstreamForPlatformKey, syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+          const provisioned = await ensureUpstreamForPlatformKey(user, {
+            platformKeyId: created.id,
+            budget: input.budget ?? null,
+            reason: "create",
+          });
+          upstreamProvisioned = true;
+          upstreamPrefix = provisioned.prefix;
+          upstreamTokenLimit = provisioned.tokenLimit;
+          upstreamKind = provisioned.kind;
+          logger.info("upstream_key.ready_on_platform_key_create", {
+            userId: user.id,
+            platformKeyId: created.id,
+            created: provisioned.created,
+            prefix: provisioned.prefix,
+            tokenLimit: provisioned.tokenLimit,
+            kind: provisioned.kind,
+            budget: input.budget ?? null,
+          });
+          if (input.budget == null) await syncUpstreamTokenLimitSafe(user, "key_budget");
+        } else {
+          logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
+        }
+      }
+      return success({ ...created, secret, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit, upstreamKind }, 201);
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "rotate") {
       const id = uuid.parse(segments[1]);
-      // Rotate PanaAI secret only. Do not mint another CVC key (orphans until revoke/delete is wired).
+      // Rotate PanaAI secret only; relink capped CVC row to the new key id (no new CVC mint).
       const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const result = await db.transaction(async tx => {
         const [old] = await tx.select().from(s.keys).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id))).for("update");
         if (!old || !old.enabled) throw new ApiError("key_revoked", "کلید لغو شده یا وجود ندارد.", 409);
-        const [key] = await tx.insert(s.keys).values({ userId: user.id, name: old.name, prefix: secret.slice(0, 16), verifier: hash, budget: old.budget, rateLimit: old.rateLimit, allowedModels: old.allowedModels, spent: old.spent }).returning({ id: s.keys.id, name: s.keys.name });
+        const [key] = await tx.insert(s.keys).values({ userId: user.id, name: old.name, prefix: secret.slice(0, 16), verifier: hash, budget: old.budget, rateLimit: old.rateLimit, allowedModels: old.allowedModels, spent: old.spent }).returning({ id: s.keys.id, name: s.keys.name, budget: s.keys.budget });
         await tx.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(eq(s.keys.id, old.id));
         await tx.insert(s.audit).values({ userId: user.id, action: "key.rotated", targetId: key.id, details: { previousId: old.id, upstreamReminted: false } });
-        return key;
+        return { key, previousId: old.id, budget: old.budget };
       });
-      return success({ ...result, secret, upstreamProvisioned: false }, 201);
+      if (!isDemo && result.budget != null) {
+        const { relinkCappedUpstream } = await import("@/lib/upstream-keys");
+        await relinkCappedUpstream(result.previousId, result.key.id, user.id);
+      }
+      return success({ ...result.key, secret, upstreamProvisioned: false }, 201);
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "revoke") {
       const id = uuid.parse(segments[1]);
-      await db.transaction(async tx => {
-        const [key] = await tx.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id), eq(s.keys.enabled, true))).returning({ id: s.keys.id });
-        if (key) await tx.insert(s.audit).values({ userId: user.id, action: "key.revoked", targetId: id });
-      });
+      const [revoked] = await db.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id), eq(s.keys.enabled, true))).returning({ id: s.keys.id, budget: s.keys.budget });
+      if (revoked) await db.insert(s.audit).values({ userId: user.id, action: "key.revoked", targetId: id });
+      if (!isDemo && revoked) {
+        const { revokeCappedUpstream, syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+        if (revoked.budget != null) await revokeCappedUpstream(revoked.id, user.id);
+        await syncUpstreamTokenLimitSafe(user, "key_revoke");
+      }
       return success({ ok: true });
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "update") {
@@ -381,6 +392,22 @@ export async function handler(req: NextRequest, context: Context) {
         await tx.insert(s.audit).values({ userId: user.id, action: "key.updated", targetId: id, details: patch });
         return row;
       });
+      if (!isDemo && input.budget !== undefined) {
+        const {
+          ensureUpstreamForPlatformKey,
+          revokeCappedUpstream,
+          syncCappedKeyLimit,
+          syncUpstreamTokenLimitSafe,
+        } = await import("@/lib/upstream-keys");
+        if (updated.budget != null) {
+          const ensured = await ensureUpstreamForPlatformKey(user, { platformKeyId: updated.id, budget: updated.budget, reason: "budget_change" });
+          if (!ensured.created) await syncCappedKeyLimit(user, updated.id, updated.budget, "key_budget");
+        } else {
+          await revokeCappedUpstream(updated.id, user.id);
+          await ensureUpstreamForPlatformKey(user, { platformKeyId: updated.id, budget: null, reason: "budget_change" });
+        }
+        await syncUpstreamTokenLimitSafe(user, "key_budget");
+      }
       return success(updated);
     }
     if (req.method === "POST" && segments[0] === "admin" && segments[1] === "orders") {
@@ -422,6 +449,14 @@ export async function handler(req: NextRequest, context: Context) {
         await tx.insert(s.audit).values({ userId: user.id, action: `payment.${action}`, targetId: orderId, details: { actor: user.id, customerId, from: order.state, to: nextState, reason: input.note, reasonCode: input.reasonCode || null, customerMessage: input.customerMessage || null, amountIrr: order.amountIrr, bankReference: input.bankReference || null } });
         return updated;
       });
+      if (!isDemo && action === "approve" && result && "userId" in result) {
+        const customerId = (result as { userId: string }).userId;
+        const [customer] = await db.select().from(s.users).where(eq(s.users.id, customerId)).limit(1);
+        if (customer) {
+          const { syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+          await syncUpstreamTokenLimitSafe(customer, "wallet_topup");
+        }
+      }
       return success(result);
     }
     if (route === "auth/logout" && req.method === "POST") {

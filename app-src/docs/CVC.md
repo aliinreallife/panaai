@@ -28,7 +28,12 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 ## Architecture (MVP)
 
 1. Customers buy **PanaAI internal credits**; FEFO lots, limits, unused balance and platform API keys stay local.
-2. Creating a PanaAI platform API key in live mode **ensures one** delegated CVC upstream key per wallet (encrypted in `platform_upstream_credentials`). Mint always sets a finite `token_limit`: from the key budget when set, otherwise the wallet’s **unallocated** credits (still capped by `system.cvcDelegatedTokenCap`, default 5M). **Never mint unlimited.** Key budgets are soft allocations (UI: allocated vs free) — lots are not debited on create; revoke frees the earmark. Rotate only replaces the PanaAI secret. Gateway reuses the wallet credential; first-use mint happens only if create-time provisioning was skipped.
+2. Upstream CVC credentials (`platform_upstream_key_creds`):
+   - **Budgeted (capped) PanaAI key** → its **own** delegated CVC key with `token_limit` from that budget (hard-capped by `system.cvcDelegatedTokenCap`).
+   - **No-budget PanaAI keys** of the same user → **one shared** CVC key sized to **unallocated** credits.
+   - Usage/analytics still log the **PanaAI key name**, so uncapped keys stay distinguishable in our UI.
+   - Rotate only replaces the PanaAI secret (capped CVC row is relinked). Top-up / revoke / budget changes sync the **shared** CVC `token_limit` via `POST /v1/keys/edit` without changing PanaAI secrets.
+   - **Never mint unlimited** CVC keys.
 3. `CVC_PRIMARY_API_KEY` is for **management** (mint delegated keys, catalog sync, platform balance/coverage). It is never used as the shared chat runtime key for all customers.
 4. `system.creditsPerUsd` (default 20M) is the customer purchase rate. `system.upstreamTokensPerUsd` (default 25M) is admin-only wholesale. `system.creditsPerCvcToken` (default 1) converts upstream `cost_tokens` into customer credits. `system.cvcDelegatedTokenCap` is the hard ceiling on every delegated CVC key.
 5. Streaming (`stream: true`) is rejected until SSE settlement is implemented.
