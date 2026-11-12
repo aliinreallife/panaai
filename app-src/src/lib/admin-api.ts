@@ -4,7 +4,6 @@ import { users, audit } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { ApiError, sandboxOnly } from "@/lib/server";
-import { MODEL_CATALOG } from "@/lib/shared";
 export async function adminAction(req: NextRequest, user: typeof users.$inferSelect, route: string, getBody: () => Promise<unknown>) {
   sandboxOnly();
   if (!user.demo) throw new ApiError("forbidden", "مدیریت فقط برای داده‌های آزمایشی همین حساب در دسترس است.", 403);
@@ -36,14 +35,22 @@ export async function adminAction(req: NextRequest, user: typeof users.$inferSel
     });
     return done();
   }
-  if (route.startsWith("admin/models/") && req.method === "PUT") {
-    const id = route.split("/")[2];
-    if (!MODEL_CATALOG.some(m => m.id === id)) throw new ApiError("model_disabled", "مدل یافت نشد.", 404);
-    const input = z.object({ enabled: z.boolean(), reason: z.string().trim().min(10).max(1000) }).parse(await getBody());
+  if ((route === "admin/models" || route.startsWith("admin/models/")) && req.method === "PUT") {
+    const fromPath = route.startsWith("admin/models/") ? decodeURIComponent(route.slice("admin/models/".length)) : "";
+    const input = z.object({
+      id: z.string().trim().min(1).max(120).regex(/^[\w./:-]+$/).optional(),
+      enabled: z.boolean(),
+      reason: z.string().trim().min(10).max(1000),
+    }).parse(await getBody());
+    const id = input.id || fromPath;
+    if (!id || id.length > 120 || !/^[\w./:-]+$/.test(id)) throw new ApiError("model_disabled", "مدل یافت نشد.", 404);
+    const { resolveModelCatalog } = await import("@/lib/models");
+    const catalog = await resolveModelCatalog(user.settings);
+    if (!catalog.some(m => m.id === id)) throw new ApiError("model_disabled", "مدل یافت نشد.", 404);
     await db.transaction(async tx => {
       const [current] = await tx.select().from(users).where(eq(users.id, user.id)).for("update");
       await tx.update(users).set({ settings: { ...current.settings, [`model:${id}`]: input.enabled } }).where(eq(users.id, user.id));
-      await tx.insert(audit).values({ userId: user.id, action: "model.updated", targetId: id, details: { ...input, previousEnabled: current.settings[`model:${id}`] !== false, liveActivated: false } });
+      await tx.insert(audit).values({ userId: user.id, action: "model.updated", targetId: id, details: { enabled: input.enabled, reason: input.reason, previousEnabled: current.settings[`model:${id}`] !== false, liveActivated: catalog.some(m => m.id === id && m.live) } });
     });
     return done();
   }

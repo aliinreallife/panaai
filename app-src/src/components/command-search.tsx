@@ -2,10 +2,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Modal, useApp } from "@/components/ui";
-import { MODEL_CATALOG, NAV_ITEMS, ascii, compact } from "@/lib/shared";
+import { NAV_ITEMS, ascii, compact } from "@/lib/shared";
 const normalize = (s: string) => ascii(s).toLowerCase().replaceAll("ي", "ی").replaceAll("ك", "ک");
 export function CommandSearch({ onClose }: { onClose: () => void }) {
   const { data, openKey, openOrder, openUsage } = useApp(); const router = useRouter();
+  const catalog = data.models?.length ? data.models : [];
   const [query, setQuery] = useState(""); const [selected, setSelected] = useState(0); const input = useRef<HTMLInputElement>(null); const listId = useId();
   const go = (href: string) => { onClose(); router.push(href); };
   const routes = [...NAV_ITEMS, { id: "docs", label: "مستندات و راهنما", icon: "docs", href: "/docs" }, { id: "support", label: "پشتیبانی", icon: "support", href: "/support" }, { id: "settings", label: "تنظیمات", icon: "settings", href: "/settings" }, ...(data.account.operator ? [{ id: "admin", label: "مدیریت", icon: "shield", href: "/admin" }] : [])];
@@ -13,7 +14,7 @@ export function CommandSearch({ onClose }: { onClose: () => void }) {
   const records = query.trim() ? [
     ...data.orders.map(o => ({ id: o.id, title: o.reference, description: `سفارش · ${compact(o.credits)} اعتبار`, icon: "orders", run: () => { onClose(); setTimeout(() => openOrder(o), 30); } })),
     ...data.keys.map(k => ({ id: k.id, title: k.name, description: `کلید API · ${k.enabled ? "فعال" : "لغوشده"}`, icon: "keys", run: () => go(`/keys?search=${encodeURIComponent(k.name)}`) })),
-    ...MODEL_CATALOG.map(m => ({ id: m.id, title: m.name, description: `مدل پیشنهادی · ${m.company}`, icon: "box", run: () => go(`/models?search=${encodeURIComponent(m.name)}`) })),
+    ...catalog.map(m => ({ id: m.id, title: m.name, description: `مدل · ${m.company}`, icon: "box", run: () => go(`/models?search=${encodeURIComponent(m.name)}`) })),
     ...data.usage.map(u => ({ id: u.id, title: u.requestId, description: `درخواست اخیر · ${u.model}`, icon: "code", run: () => { onClose(); setTimeout(() => openUsage(u), 30); } })),
   ] : [];
   const results = [...actions, ...records].filter(r => !query.trim() || normalize(`${r.title} ${r.description}`).includes(normalize(query.trim()))).slice(0, 9);

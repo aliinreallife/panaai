@@ -28,6 +28,11 @@ pass("balance JSON shapes");
 assert.deepEqual(c.parseCvcModels({ data: [{ id: "gpt-5.6-terra", multiplier: 1.2 }, { id: " " }, { foo: 1 }] }).map((m) => m.id), ["gpt-5.6-terra"]);
 assert.equal(c.parseCvcModels({ models: [{ id: "claude-sonnet-5", base_multiplier: 3 }] })[0].base_multiplier, 3);
 assert.deepEqual(c.parseCvcModels(null), []);
+const catalogPayload = { data: [{ id: "gpt-live-1", multiplier: 1.5 }, { id: "claude-sonnet-5", base_multiplier: 2 }] };
+assert.deepEqual(c.parseCvcModels(JSON.parse(JSON.stringify(catalogPayload))).map((m) => ({ id: m.id, multiplier: m.multiplier ?? m.base_multiplier })), [
+  { id: "gpt-live-1", multiplier: 1.5 },
+  { id: "claude-sonnet-5", multiplier: 2 },
+]);
 pass("model list parsing");
 
 assert.deepEqual(c.parseCvcUsage({ usage: { prompt_tokens: 10, completion_tokens: 5, cost_tokens: 18 } }), { inputTokens: 10, outputTokens: 5, costTokens: 18 });

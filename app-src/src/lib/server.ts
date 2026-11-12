@@ -162,10 +162,12 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
   const { ensureDefaults } = await import("@/lib/ops-api");
   const { evaluateProvider } = await import("@/lib/provider");
   await ensureDefaults(user);
-  const [provider, packageRows, refundRows] = await Promise.all([
+  const { resolveModelCatalog } = await import("@/lib/models");
+  const [provider, packageRows, refundRows, models] = await Promise.all([
     evaluateProvider(user),
     db.select().from(s.packages).where(and(eq(s.packages.userId, user.id), eq(s.packages.active, true))).orderBy(asc(s.packages.sort)),
     db.select().from(s.refunds).where(eq(s.refunds.userId, user.id)).orderBy(desc(s.refunds.createdAt)),
+    resolveModelCatalog(user.settings),
   ]);
   const own = <T>(column: T) => eq(column as unknown as typeof s.keys.userId, user.id);
   const [keyRows, orderRows, lotRows, eventRows, analytics, usageRows, auditRows, ticketRows] = await Promise.all([
@@ -185,6 +187,7 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     service: { state: provider.state, admits: provider.admits, checkedAt: provider.checkedAt },
     account: { state: user.state, role: isOperator(user.role) ? user.role : "customer", operator: isOperator(user.role) },
     mode: isDemo ? "sandbox" as const : "live" as const,
+    models,
     packages: packageRows.map(p => ({ id: p.id, label: p.label, subtitle: p.subtitle, amountToman: p.amountToman, icon: p.icon, featured: p.featured })),
     refunds: refundRows,
     system: systemSettings(user.settings),

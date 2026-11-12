@@ -35,6 +35,17 @@ export type UsageReport = {
   byKey: { key: string; credits: number; requests: number; errors: number; share: number }[];
   rows: UsageItem[]; total: number; page: number; pageSize: number;
 };
+export type ModelItem = {
+  id: string;
+  name: string;
+  company: string;
+  color: string;
+  context: string;
+  description: string;
+  mark: string;
+  multiplier?: number | null;
+  live?: boolean;
+};
 export type AppData = {
   user: { id: string; name: string; demo: boolean; createdAt: string; settings: Record<string, boolean | string> };
   analytics: UsageReport;
@@ -45,6 +56,7 @@ export type AppData = {
   service: { state: import("@/lib/rules").ProviderState; admits: boolean; checkedAt: string | null };
   account: { state: string; role: string; operator: boolean };
   mode: "sandbox" | "live";
+  models: ModelItem[];
   packages: PackageItem[];
   refunds: RefundItem[];
   system: import("@/lib/rules").SystemSettings;

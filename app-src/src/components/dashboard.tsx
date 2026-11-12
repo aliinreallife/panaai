@@ -2,7 +2,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DailyItem, MODEL_CATALOG, UsageItem, UsageReport, fa, compact, persianDate, persianTime } from "@/lib/shared";
+import { DailyItem, UsageItem, UsageReport, fa, compact, persianDate, persianTime } from "@/lib/shared";
 import { ActionLink, Badge, Button, Empty, Icon, ModelMark, Notice, useApp } from "@/components/ui";
 import { BalanceWaves } from "@/components/brand-art";
 import { chartBuckets, percentChange } from "@/lib/report-utils";
@@ -58,13 +58,21 @@ export function TrendChart({ daily, range, setRange, title = "روند مصرف 
   </section>;
 }
 export function ModelShare({ report }: { report: UsageReport }) {
-  const rows = MODEL_CATALOG.map(model => ({ ...model, ...(report.byModel.find(m => m.model === model.id) || { share: 0, credits: 0, requests: 0 }) })).sort((a, b) => b.credits - a.credits);
-  return <section className="panel model-share"><div className="panel-heading"><div className="dashboard-panel-title"><Icon name="box" size={23} /><div><h2>مصرف بر اساس مدل</h2><p>سهم مصرف اعتبار در {fa(report.days)} روز گذشته</p></div></div><Link href="/usage" className="round-arrow" aria-label="گزارش مصرف به تفکیک مدل"><Icon name="upRight" size={20} /></Link></div><div className="gold-model-list">{rows.map(model => <Link href={`/usage?model=${model.id}&days=${report.days}`} key={model.id} aria-label={`${model.name}: ${fa(model.share)} درصد مصرف`}><ModelMark model={model.id} size={28} /><div className="model-usage-track"><div><bdi>{model.name}</bdi><span>{fa(model.share)}٪</span></div><div className="model-progress" role="img" aria-label={`${fa(model.credits)} اعتبار`}><span style={{ width: `${model.share}%` }} /></div></div></Link>)}</div><div className="model-share-footer"><span><i className="gold-dot" />محاسبه از فراداده درخواست‌ها</span><bdi>{compact(report.summary.credits)} اعتبار</bdi></div></section>;
+  const { data } = useApp();
+  const catalog = data.models?.length ? data.models : [];
+  const usageIds = new Set(report.byModel.map(m => m.model));
+  const base = catalog.length ? catalog : report.byModel.map(m => ({ id: m.model, name: m.model, company: "", color: "#287e6b", context: "—", description: "", mark: "openai" as const }));
+  const rows = [
+    ...base.map(model => ({ ...model, ...(report.byModel.find(m => m.model === model.id) || { share: 0, credits: 0, requests: 0 }) })),
+    ...report.byModel.filter(m => !base.some(b => b.id === m.model)).map(m => ({ id: m.model, name: m.model, company: "", color: "#287e6b", context: "—", description: "", mark: "openai", share: m.share, credits: m.credits, requests: m.requests })),
+  ].filter(m => m.credits > 0 || usageIds.has(m.id) || catalog.some(c => c.id === m.id)).sort((a, b) => b.credits - a.credits).slice(0, 12);
+  return <section className="panel model-share"><div className="panel-heading"><div className="dashboard-panel-title"><Icon name="box" size={23} /><div><h2>مصرف بر اساس مدل</h2><p>سهم مصرف اعتبار در {fa(report.days)} روز گذشته</p></div></div><Link href="/usage" className="round-arrow" aria-label="گزارش مصرف به تفکیک مدل"><Icon name="upRight" size={20} /></Link></div><div className="gold-model-list">{rows.map(model => <Link href={`/usage?model=${encodeURIComponent(model.id)}&days=${report.days}`} key={model.id} aria-label={`${model.name}: ${fa(model.share)} درصد مصرف`}><ModelMark model={model.id} size={28} /><div className="model-usage-track"><div><bdi>{model.name}</bdi><span>{fa(model.share)}٪</span></div><div className="model-progress" role="img" aria-label={`${fa(model.credits)} اعتبار`}><span style={{ width: `${model.share}%` }} /></div></div></Link>)}</div><div className="model-share-footer"><span><i className="gold-dot" />محاسبه از فراداده درخواست‌ها</span><bdi>{compact(report.summary.credits)} اعتبار</bdi></div></section>;
 }
 export function RequestTable({ rows, full = false }: { rows: UsageItem[]; full?: boolean }) {
-  const { openUsage } = useApp();
+  const { data, openUsage } = useApp();
+  const catalog = data.models?.length ? data.models : [];
   if (!rows.length) return <Empty title="درخواستی با این فیلتر پیدا نشد" text="بازه زمانی یا فیلتر مدل را تغییر دهید." icon="search" />;
-  return <div className="table-scroll"><table className="request-table"><thead><tr><th>مدل</th><th>کلید API</th><th>مصرف اعتبار</th>{full && <th>زمان پاسخ</th>}<th>وضعیت</th><th>زمان درخواست</th><th><span className="sr-only">جزئیات</span></th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><button className="model-cell request-detail-button" onClick={() => openUsage(row)} aria-label={`جزئیات درخواست ${row.requestId}`}><ModelMark model={row.model} size={26} /><span dir="ltr">{MODEL_CATALOG.find(m => m.id === row.model)?.name || row.model}</span></button></td><td><span className="key-tag">{row.keyName}</span></td><td className="number">{fa(row.credits)}</td>{full && <td className="muted">{fa(row.latency / 1000)} ثانیه</td>}<td><Badge tone={row.status === "success" ? "success" : "danger"}>{row.status === "success" ? "موفق" : "ناموفق"}</Badge></td><td className="request-time">{persianTime(row.createdAt)}<span>{persianDate(row.createdAt)}</span></td><td><button className="icon-btn" onClick={() => openUsage(row)} aria-label={`مشاهده ${row.requestId}`}><Icon name="chevron" size={14} /></button></td></tr>)}</tbody></table></div>;
+  return <div className="table-scroll"><table className="request-table"><thead><tr><th>مدل</th><th>کلید API</th><th>مصرف اعتبار</th>{full && <th>زمان پاسخ</th>}<th>وضعیت</th><th>زمان درخواست</th><th><span className="sr-only">جزئیات</span></th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><button className="model-cell request-detail-button" onClick={() => openUsage(row)} aria-label={`جزئیات درخواست ${row.requestId}`}><ModelMark model={row.model} size={26} /><span dir="ltr">{catalog.find(m => m.id === row.model)?.name || row.model}</span></button></td><td><span className="key-tag">{row.keyName}</span></td><td className="number">{fa(row.credits)}</td>{full && <td className="muted">{fa(row.latency / 1000)} ثانیه</td>}<td><Badge tone={row.status === "success" ? "success" : "danger"}>{row.status === "success" ? "موفق" : "ناموفق"}</Badge></td><td className="request-time">{persianTime(row.createdAt)}<span>{persianDate(row.createdAt)}</span></td><td><button className="icon-btn" onClick={() => openUsage(row)} aria-label={`مشاهده ${row.requestId}`}><Icon name="chevron" size={14} /></button></td></tr>)}</tbody></table></div>;
 }
 function StatChange({ current, previous }: { current: number; previous: number }) {
   const change = percentChange(current, previous);
