@@ -11,7 +11,8 @@ import { getUsageReport } from "@/lib/analytics";
 import { tehranDay } from "@/lib/report-utils";
 import { customerSystemSettings, isOperator, systemSettings } from "@/lib/rules";
 
-export const PRICING = { rateIrr: 900000, minToman: 50000, maxToman: 5000000, version: "demo-v1", validityDays: 365 };
+/** Default FX: 275,000 تومان/USD (= 2,750,000 ریال). Override via admin → pricing (platform-wide). */
+export const PRICING = { rateIrr: 2_750_000, minToman: 50_000, maxToman: 5_000_000, version: "fx-275k-v1", validityDays: 365 };
 export const isDemo = process.env.PLATFORM_MODE !== "live";
 /**
  * Sandbox workspaces are customer accounts by default. Set SANDBOX_OPERATOR_ACCESS=true (internal
@@ -20,17 +21,23 @@ export const isDemo = process.env.PLATFORM_MODE !== "live";
 export const sandboxOperatorAccess = isDemo && process.env.SANDBOX_OPERATOR_ACCESS === "true";
 /** Opt-in fake wallet/usage for local tests only. Production and normal sandbox stay empty. */
 export const sandboxSeedDemo = isDemo && process.env.SANDBOX_SEED_DEMO === "true";
-export const pricingFor = (user: typeof s.users.$inferSelect) => {
+export async function pricingFor(user: typeof s.users.$inferSelect) {
   const system = systemSettings(user.settings);
+  const { readPlatformPricing } = await import("@/lib/platform-pricing");
+  const platform = await readPlatformPricing();
+  // Prefer platform-wide FX; fall back to legacy per-account override, then code default.
+  const legacyRate = Number(user.settings.fxRateIrr || 0);
+  const legacyMin = Number(user.settings.minToman || 0);
+  const legacyMax = Number(user.settings.maxToman || 0);
   return {
     ...PRICING,
     creditsPerUsd: system.creditsPerUsd,
-    rateIrr: Number(user.settings.fxRateIrr || PRICING.rateIrr),
-    minToman: Number(user.settings.minToman || PRICING.minToman),
-    maxToman: Number(user.settings.maxToman || PRICING.maxToman),
-    version: String(user.settings.priceVersion || PRICING.version),
+    rateIrr: platform.rateIrr || legacyRate || PRICING.rateIrr,
+    minToman: platform.minToman || legacyMin || PRICING.minToman,
+    maxToman: platform.maxToman || legacyMax || PRICING.maxToman,
+    version: platform.version || String(user.settings.priceVersion || PRICING.version),
   };
-};
+}
 export const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 400, public retryAfter?: number) { super(message); }
@@ -215,7 +222,7 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     refunds: refundRows,
     // Wholesale upstream rate stays off the customer payload.
     system: isOperator(user.role) ? systemSettings(user.settings) : customerSystemSettings(user.settings),
-    pricing: pricingFor(user),
+    pricing: await pricingFor(user),
     payments: await (async () => {
       const { formatCardNumber, readDestinationCard } = await import("@/lib/payments");
       const dest = await readDestinationCard();

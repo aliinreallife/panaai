@@ -61,7 +61,7 @@ export async function handler(req: NextRequest, context: Context) {
       return res;
     }
     const user = await requireUser();
-    const PRICING = pricingFor(user);
+    const PRICING = await pricingFor(user);
     await limit(`requests:${user.id}`, 180);
     if (req.method !== "GET") sandboxOnly();
     if (req.method !== "GET" && user.state === "suspended" && ["quotes", "orders", "keys", "refunds"].includes(segments[0])) throw new ApiError("account_suspended", "حساب شما معلق است؛ ثبت سفارش، کلید یا درخواست جدید ممکن نیست. با پشتیبانی تماس بگیرید.", 403);

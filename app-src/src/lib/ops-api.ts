@@ -4,7 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { ApiError, PRICING, sandboxOnly } from "@/lib/server";
+import { ApiError, PRICING, pricingFor, sandboxOnly } from "@/lib/server";
 import { authorizeAdmin, confirmMfa, demoTotp, dropElevation, elevate, enrollMfa, securityStatus } from "@/lib/security";
 import { channelConfig, evaluateProvider, listAlerts, raiseAlert } from "@/lib/provider";
 import { adjust, reconcile, reverseForRefund } from "@/lib/wallet";
@@ -187,7 +187,8 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   /* ---- packages ---- */
   if (route === "admin/packages" && m === "GET") return ok(await db.select().from(s.packages).where(eq(s.packages.userId, user.id)).orderBy(asc(s.packages.sort)));
   if (seg[1] === "packages" && (m === "PUT" || m === "POST")) {
-    const pricing = { min: Number(user.settings.minToman || PRICING.minToman), max: Number(user.settings.maxToman || PRICING.maxToman) };
+    const livePricing = await pricingFor(user);
+    const pricing = { min: livePricing.minToman, max: livePricing.maxToman };
     const input = z.object({ label: z.string().trim().min(2).max(30), subtitle: z.string().trim().max(80), amountToman: z.number().int().min(pricing.min).max(pricing.max), icon: z.enum(["sparkle", "zap", "models", "wallet"]), featured: z.boolean(), active: z.boolean(), sort: z.number().int().min(0).max(99), reason }).parse(await body());
     const { reason: why, ...values } = input;
     const row = await db.transaction(async tx => {
