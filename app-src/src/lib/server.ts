@@ -18,6 +18,8 @@ export const isDemo = process.env.PLATFORM_MODE !== "live";
  * previews and tests only) to make each new sandbox workspace the operator of its own data.
  */
 export const sandboxOperatorAccess = isDemo && process.env.SANDBOX_OPERATOR_ACCESS === "true";
+/** Opt-in fake wallet/usage for local tests only. Production and normal sandbox stay empty. */
+export const sandboxSeedDemo = isDemo && process.env.SANDBOX_SEED_DEMO === "true";
 export const pricingFor = (user: typeof s.users.$inferSelect) => ({
   ...PRICING,
   rateIrr: Number(user.settings.fxRateIrr || PRICING.rateIrr),
@@ -92,66 +94,83 @@ export async function requireUser() {
   if (!user) throw new ApiError("unauthorized", "نشست شما منقضی شده است؛ صفحه را دوباره بارگذاری کنید.", 401);
   return user;
 }
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Fake wallet/keys/usage used only when SANDBOX_SEED_DEMO=true (CI / local test harness). */
+async function seedDemoWorkspace(tx: Tx, userId: string) {
+  const now = new Date();
+  const seededOrders = await tx.insert(s.orders).values([
+    { userId, reference: `CR-${randomBytes(3).toString("hex").toUpperCase()}`, amountIrr: 360000, rateIrr: PRICING.rateIrr, credits: 8000000, state: "approved_and_credited", transferDeadline: future(-352), approvedAt: future(-353), createdAt: future(-353) },
+    { userId, reference: `CR-${randomBytes(3).toString("hex").toUpperCase()}`, amountIrr: 540000, rateIrr: PRICING.rateIrr, credits: 12000000, state: "approved_and_credited", transferDeadline: future(-57), approvedAt: future(-58), createdAt: future(-58) },
+  ]).returning();
+  const seededLots = await tx.insert(s.lots).values([
+    { userId, orderId: seededOrders[0].id, granted: 8000000, remaining: 2480000, expiresAt: future(12), createdAt: future(-353) },
+    { userId, orderId: seededOrders[1].id, granted: 12000000, remaining: 10000000, expiresAt: future(307), createdAt: future(-58) },
+  ]).returning();
+  for (const lot of seededLots) {
+    const grantId = `seed-grant-${lot.id}`;
+    const [grant] = await tx.insert(s.walletEvents).values({ userId, lotId: lot.id, type: "grant", delta: lot.granted, description: "خرید اعتبار نمونه ـ کارت‌به‌کارت", idempotencyKey: grantId, createdAt: lot.createdAt }).returning();
+    const [consume] = await tx.insert(s.walletEvents).values({ userId, lotId: lot.id, type: "consume", delta: -(lot.granted - lot.remaining), description: "مصرف نمونه در دوره جاری", idempotencyKey: `seed-consume-${lot.id}`, createdAt: future(-1) }).returning();
+    await tx.insert(s.journal).values([
+      { eventId: grant.id, account: `customer:${userId}`, delta: lot.granted },
+      { eventId: grant.id, account: "issuer:demo", delta: -lot.granted },
+      { eventId: consume.id, account: `customer:${userId}`, delta: consume.delta },
+      { eventId: consume.id, account: "consumed:demo", delta: -consume.delta },
+    ]);
+  }
+  const sampleNames = ["پروژه اصلی", "محیط توسعه", "دستیار شخصی"];
+  for (let i = 0; i < 3; i++) {
+    await tx.insert(s.keys).values({ userId, name: sampleNames[i], prefix: `sk_test_${randomBytes(3).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 5000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
+  }
+  const weights = [12, 16, 14, 17, 13, 28, 32, 30, 34, 29, 19, 20, 18, 24, 21, 30, 34, 36, 33, 39, 38, 41, 44, 40, 46, 29, 32, 28, 35, 31];
+  const total = weights.reduce((a, b) => a + b, 0);
+  let allocated = 0, requestsAllocated = 0;
+  const days = weights.map((weight, i) => {
+    const credits = i === 29 ? 7520000 - allocated : Math.floor(weight / total * 7520000);
+    const requests = i === 29 ? 1284 - requestsAllocated : Math.floor(weight / total * 1284);
+    allocated += credits; requestsAllocated += requests;
+    return { userId, day: tehranDay(future(i - 29)), credits, requests, errors: i % 3 === 0 ? 1 : 0 };
+  });
+  await tx.insert(s.usageDaily).values(days);
+  const requestRows: (typeof s.usage.$inferInsert)[] = [];
+  for (const [dayIndex, day] of days.entries()) {
+    const start = new Date(`${day.day}T00:00:00+03:30`).getTime();
+    const end = Math.min(start + 86400000, now.getTime() - 1000);
+    const dayWeights = Array.from({ length: day.requests }, (_, i) => i < day.errors ? 0 : [1, 1.1, 1.2, 1.1][i % 20 < 9 ? 0 : i % 20 < 15 ? 1 : i % 20 < 18 ? 2 : 3]);
+    const totalWeight = dayWeights.reduce((a, b) => a + b, 0);
+    let charged = 0;
+    for (let i = 0; i < day.requests; i++) {
+      const modelIndex = i % 20 < 9 ? 0 : i % 20 < 15 ? 1 : i % 20 < 18 ? 2 : 3;
+      const credits = i === day.requests - 1 ? day.credits - charged : Math.floor(day.credits * dayWeights[i] / totalWeight);
+      charged += credits;
+      requestRows.push({ userId, requestId: `req_${randomBytes(8).toString("hex")}`, keyName: sampleNames[(i + dayIndex) % 3], model: MODEL_CATALOG[modelIndex].id, credits, inputTokens: 420 + (i * 173) % 2000, outputTokens: i < day.errors ? 0 : 240 + (i * 137) % 1400, latency: 810 + (i * 157) % 2400, status: i < day.errors ? "error" : "success", createdAt: new Date(start + (i + 1) / (day.requests + 1) * Math.max(1, end - start)) });
+    }
+  }
+  for (let i = 0; i < requestRows.length; i += 300) await tx.insert(s.usage).values(requestRows.slice(i, i + 300));
+  for (const name of sampleNames) {
+    const requests = requestRows.filter(row => row.keyName === name);
+    await tx.update(s.keys).set({ spent: requests.reduce((a, row) => a + Number(row.credits), 0), lastUsedAt: new Date(Math.max(...requests.map(row => new Date(row.createdAt as Date).getTime()))) }).where(and(eq(s.keys.userId, userId), eq(s.keys.name, name)));
+  }
+}
+
 export async function createSandbox() {
   sandboxOnly();
   const token = randomBytes(32).toString("hex");
   const user = await db.transaction(async tx => {
-    const [user] = await tx.insert(s.users).values({ name: "آرین محمدی", demo: true, role: sandboxOperatorAccess ? "owner" : "customer" }).returning();
+    const [user] = await tx.insert(s.users).values({ name: "کاربر", demo: true, role: sandboxOperatorAccess ? "owner" : "customer" }).returning();
     await tx.insert(s.sessions).values({ tokenHash: sha(token), userId: user.id, expiresAt: future(7) });
-    const now = new Date();
-    const seededOrders = await tx.insert(s.orders).values([
-      { userId: user.id, reference: `CR-${randomBytes(3).toString("hex").toUpperCase()}`, amountIrr: 360000, rateIrr: PRICING.rateIrr, credits: 8000000, state: "approved_and_credited", transferDeadline: future(-352), approvedAt: future(-353), createdAt: future(-353) },
-      { userId: user.id, reference: `CR-${randomBytes(3).toString("hex").toUpperCase()}`, amountIrr: 540000, rateIrr: PRICING.rateIrr, credits: 12000000, state: "approved_and_credited", transferDeadline: future(-57), approvedAt: future(-58), createdAt: future(-58) },
-    ]).returning();
-    const seededLots = await tx.insert(s.lots).values([
-      { userId: user.id, orderId: seededOrders[0].id, granted: 8000000, remaining: 2480000, expiresAt: future(12), createdAt: future(-353) },
-      { userId: user.id, orderId: seededOrders[1].id, granted: 12000000, remaining: 10000000, expiresAt: future(307), createdAt: future(-58) },
-    ]).returning();
-    for (const lot of seededLots) {
-      const grantId = `seed-grant-${lot.id}`;
-      const [grant] = await tx.insert(s.walletEvents).values({ userId: user.id, lotId: lot.id, type: "grant", delta: lot.granted, description: "خرید اعتبار نمونه ـ کارت‌به‌کارت", idempotencyKey: grantId, createdAt: lot.createdAt }).returning();
-      const [consume] = await tx.insert(s.walletEvents).values({ userId: user.id, lotId: lot.id, type: "consume", delta: -(lot.granted - lot.remaining), description: "مصرف نمونه در دوره جاری", idempotencyKey: `seed-consume-${lot.id}`, createdAt: future(-1) }).returning();
-      await tx.insert(s.journal).values([
-        { eventId: grant.id, account: `customer:${user.id}`, delta: lot.granted },
-        { eventId: grant.id, account: "issuer:demo", delta: -lot.granted },
-        { eventId: consume.id, account: `customer:${user.id}`, delta: consume.delta },
-        { eventId: consume.id, account: "consumed:demo", delta: -consume.delta },
-      ]);
-    }
-    const sampleNames = ["پروژه اصلی", "محیط توسعه", "دستیار شخصی"];
-    for (let i = 0; i < 3; i++) {
-      await tx.insert(s.keys).values({ userId: user.id, name: sampleNames[i], prefix: `sk_test_${randomBytes(3).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 5000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
-    }
-    const weights = [12, 16, 14, 17, 13, 28, 32, 30, 34, 29, 19, 20, 18, 24, 21, 30, 34, 36, 33, 39, 38, 41, 44, 40, 46, 29, 32, 28, 35, 31];
-    const total = weights.reduce((a,b) => a+b, 0);
-    let allocated = 0, requestsAllocated = 0;
-    const days = weights.map((weight, i) => {
-      const credits = i === 29 ? 7520000 - allocated : Math.floor(weight / total * 7520000);
-      const requests = i === 29 ? 1284 - requestsAllocated : Math.floor(weight / total * 1284);
-      allocated += credits; requestsAllocated += requests;
-      return { userId: user.id, day: tehranDay(future(i - 29)), credits, requests, errors: i % 3 === 0 ? 1 : 0 };
+    if (sandboxSeedDemo) await seedDemoWorkspace(tx, user.id);
+    await tx.insert(s.audit).values({
+      userId: user.id,
+      action: "sandbox.created",
+      details: {
+        demo: true,
+        seeded: sandboxSeedDemo,
+        note: sandboxSeedDemo
+          ? "محیط آزمایشی با دادهٔ نمونه برای آزمون ساخته شد."
+          : "فضای کاری خالی ساخته شد؛ بدون موجودی، کلید یا مصرف نمونه.",
+      },
     });
-    await tx.insert(s.usageDaily).values(days);
-    const requestRows: (typeof s.usage.$inferInsert)[] = [];
-    for (const [dayIndex, day] of days.entries()) {
-      const start = new Date(`${day.day}T00:00:00+03:30`).getTime();
-      const end = Math.min(start + 86400000, now.getTime() - 1000);
-      const weights = Array.from({ length: day.requests }, (_, i) => i < day.errors ? 0 : [1, 1.1, 1.2, 1.1][i % 20 < 9 ? 0 : i % 20 < 15 ? 1 : i % 20 < 18 ? 2 : 3]);
-      const totalWeight = weights.reduce((a, b) => a + b, 0);
-      let charged = 0;
-      for (let i = 0; i < day.requests; i++) {
-        const modelIndex = i % 20 < 9 ? 0 : i % 20 < 15 ? 1 : i % 20 < 18 ? 2 : 3;
-        const credits = i === day.requests - 1 ? day.credits - charged : Math.floor(day.credits * weights[i] / totalWeight);
-        charged += credits;
-        requestRows.push({ userId: user.id, requestId: `req_${randomBytes(8).toString("hex")}`, keyName: sampleNames[(i + dayIndex) % 3], model: MODEL_CATALOG[modelIndex].id, credits, inputTokens: 420 + (i * 173) % 2000, outputTokens: i < day.errors ? 0 : 240 + (i * 137) % 1400, latency: 810 + (i * 157) % 2400, status: i < day.errors ? "error" : "success", createdAt: new Date(start + (i + 1) / (day.requests + 1) * Math.max(1, end - start)) });
-      }
-    }
-    for (let i = 0; i < requestRows.length; i += 300) await tx.insert(s.usage).values(requestRows.slice(i, i + 300));
-    for (const name of sampleNames) {
-      const requests = requestRows.filter(row => row.keyName === name);
-      await tx.update(s.keys).set({ spent: requests.reduce((a, row) => a + Number(row.credits), 0), lastUsedAt: new Date(Math.max(...requests.map(row => new Date(row.createdAt as Date).getTime()))) }).where(and(eq(s.keys.userId, user.id), eq(s.keys.name, name)));
-    }
-    await tx.insert(s.audit).values({ userId: user.id, action: "sandbox.created", details: { demo: true, note: "محیط آزمایشی مستقل ساخته شد. تمام موجودی اولیه و درخواست‌ها نمونه‌اند." } });
     return user;
   });
   return { user, token };

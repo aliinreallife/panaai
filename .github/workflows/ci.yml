@@ -51,7 +51,7 @@ jobs:
       - run: npm run build
       - name: Start operator (3000) and customer (3001) servers
         run: |
-          SANDBOX_OPERATOR_ACCESS=true nohup npx next start -p 3000 > operator.log 2>&1 &
+          SANDBOX_OPERATOR_ACCESS=true SANDBOX_SEED_DEMO=true nohup npx next start -p 3000 > operator.log 2>&1 &
           nohup npx next start -p 3001 > customer.log 2>&1 &
           for port in 3000 3001; do
             for i in $(seq 1 30); do curl -sf "http://localhost:$port/api/health" && break; sleep 2; done
