@@ -262,6 +262,19 @@ export async function handler(req: NextRequest, context: Context) {
       const catalog = await resolveModelCatalog(user.settings);
       const allowedIds = new Set(catalog.map(m => m.id));
       if (input.allowedModels.some(id => !allowedIds.has(id))) throw new ApiError("model_disabled", "یکی از مدل‌های انتخاب‌شده در فهرست فعال نیست.");
+      // Live: mint the per-wallet CVC upstream credential at key creation (not only on first chat).
+      let upstreamProvisioned = false;
+      if (!isDemo) {
+        const { cvcConfig } = await import("@/lib/cvc");
+        if (cvcConfig().primaryKey) {
+          const { ensureUserUpstreamKey } = await import("@/lib/upstream-keys");
+          const provisioned = await ensureUserUpstreamKey(user);
+          upstreamProvisioned = true;
+          logger.info("upstream_key.ready_on_platform_key_create", { userId: user.id, created: provisioned.created, prefix: provisioned.prefix });
+        } else {
+          logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
+        }
+      }
       const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const created = await db.transaction(async tx => {
@@ -270,13 +283,23 @@ export async function handler(req: NextRequest, context: Context) {
         const maxKeys = systemSettings(user.settings).maxKeys;
         if (existing.length >= maxKeys) throw new ApiError("key_limit", `حداکثر ${maxKeys.toLocaleString("fa-IR")} کلید فعال مجاز است.`);
         const [key] = await tx.insert(s.keys).values({ ...input, userId: user.id, prefix: secret.slice(0, 16), verifier: hash }).returning({ id: s.keys.id, name: s.keys.name, prefix: s.keys.prefix });
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name } });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, upstreamProvisioned } });
         return key;
       });
-      return success({ ...created, secret }, 201);
+      return success({ ...created, secret, upstreamProvisioned }, 201);
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "rotate") {
       const id = uuid.parse(segments[1]);
+      let upstreamProvisioned = false;
+      if (!isDemo) {
+        const { cvcConfig } = await import("@/lib/cvc");
+        if (cvcConfig().primaryKey) {
+          const { ensureUserUpstreamKey } = await import("@/lib/upstream-keys");
+          const provisioned = await ensureUserUpstreamKey(user);
+          upstreamProvisioned = true;
+          logger.info("upstream_key.ready_on_platform_key_rotate", { userId: user.id, created: provisioned.created, prefix: provisioned.prefix });
+        }
+      }
       const secret = `sk_${isDemo ? "test" : "live"}_${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const result = await db.transaction(async tx => {
@@ -284,10 +307,10 @@ export async function handler(req: NextRequest, context: Context) {
         if (!old || !old.enabled) throw new ApiError("key_revoked", "کلید لغو شده یا وجود ندارد.", 409);
         const [key] = await tx.insert(s.keys).values({ userId: user.id, name: old.name, prefix: secret.slice(0, 16), verifier: hash, budget: old.budget, rateLimit: old.rateLimit, allowedModels: old.allowedModels, spent: old.spent }).returning({ id: s.keys.id, name: s.keys.name });
         await tx.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(eq(s.keys.id, old.id));
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.rotated", targetId: key.id, details: { previousId: old.id } });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.rotated", targetId: key.id, details: { previousId: old.id, upstreamProvisioned } });
         return key;
       });
-      return success({ ...result, secret }, 201);
+      return success({ ...result, secret, upstreamProvisioned }, 201);
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "revoke") {
       const id = uuid.parse(segments[1]);

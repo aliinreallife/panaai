@@ -28,7 +28,7 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 ## Architecture (MVP)
 
 1. Customers buy **PanaAI internal credits**; FEFO lots, limits, unused balance and platform API keys stay local.
-2. Customers call **PanaAI** `/v1`; the gateway provisions/loads a **per-wallet delegated upstream key** (`platform_upstream_credentials`, encrypted at rest) and proxies with that key only.
+2. Creating (or rotating) a PanaAI platform API key in live mode **also mints** that wallet’s delegated CVC upstream key (`platform_upstream_credentials`, encrypted at rest). The gateway still loads the same credential on `/v1` chat; it will mint on first use only if create-time provisioning was skipped (e.g. no `CVC_PRIMARY_API_KEY`).
 3. `CVC_PRIMARY_API_KEY` is for **management** (mint delegated keys, catalog sync, platform balance/coverage). It is never used as the shared chat runtime key for all customers.
 4. `system.creditsPerUsd` (default 20M) is the customer purchase rate. `system.upstreamTokensPerUsd` (default 25M) is admin-only wholesale. `system.creditsPerCvcToken` (default 1) converts upstream `cost_tokens` into customer credits.
 5. Streaming (`stream: true`) is rejected until SSE settlement is implemented.
