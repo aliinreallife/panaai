@@ -226,6 +226,8 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
       lowBalanceCredits: int("lowBalanceCredits"),
       maxKeys: int("maxKeys"),
       creditsPerCvcToken: int("creditsPerCvcToken").default(SYSTEM_DEFAULTS.creditsPerCvcToken),
+      creditsPerUsd: int("creditsPerUsd").default(SYSTEM_DEFAULTS.creditsPerUsd),
+      upstreamTokensPerUsd: int("upstreamTokensPerUsd").default(SYSTEM_DEFAULTS.upstreamTokensPerUsd),
       reason,
     }).parse(await body());
     const { reason: why, ...values } = input;

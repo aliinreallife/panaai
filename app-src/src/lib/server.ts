@@ -9,9 +9,9 @@ import path from "node:path";
 import { MODEL_CATALOG } from "@/lib/shared";
 import { getUsageReport } from "@/lib/analytics";
 import { tehranDay } from "@/lib/report-utils";
-import { isOperator, systemSettings } from "@/lib/rules";
+import { customerSystemSettings, isOperator, systemSettings } from "@/lib/rules";
 
-export const PRICING = { rateIrr: 900000, creditsPerUsd: 20000000, minToman: 50000, maxToman: 5000000, version: "demo-v1", validityDays: 365 };
+export const PRICING = { rateIrr: 900000, minToman: 50000, maxToman: 5000000, version: "demo-v1", validityDays: 365 };
 export const isDemo = process.env.PLATFORM_MODE !== "live";
 /**
  * Sandbox workspaces are customer accounts by default. Set SANDBOX_OPERATOR_ACCESS=true (internal
@@ -20,13 +20,17 @@ export const isDemo = process.env.PLATFORM_MODE !== "live";
 export const sandboxOperatorAccess = isDemo && process.env.SANDBOX_OPERATOR_ACCESS === "true";
 /** Opt-in fake wallet/usage for local tests only. Production and normal sandbox stay empty. */
 export const sandboxSeedDemo = isDemo && process.env.SANDBOX_SEED_DEMO === "true";
-export const pricingFor = (user: typeof s.users.$inferSelect) => ({
-  ...PRICING,
-  rateIrr: Number(user.settings.fxRateIrr || PRICING.rateIrr),
-  minToman: Number(user.settings.minToman || PRICING.minToman),
-  maxToman: Number(user.settings.maxToman || PRICING.maxToman),
-  version: String(user.settings.priceVersion || PRICING.version),
-});
+export const pricingFor = (user: typeof s.users.$inferSelect) => {
+  const system = systemSettings(user.settings);
+  return {
+    ...PRICING,
+    creditsPerUsd: system.creditsPerUsd,
+    rateIrr: Number(user.settings.fxRateIrr || PRICING.rateIrr),
+    minToman: Number(user.settings.minToman || PRICING.minToman),
+    maxToman: Number(user.settings.maxToman || PRICING.maxToman),
+    version: String(user.settings.priceVersion || PRICING.version),
+  };
+};
 export const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 400, public retryAfter?: number) { super(message); }
@@ -209,6 +213,7 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
     models,
     packages: packageRows.map(p => ({ id: p.id, label: p.label, subtitle: p.subtitle, amountToman: p.amountToman, icon: p.icon, featured: p.featured })),
     refunds: refundRows,
-    system: systemSettings(user.settings),
+    // Wholesale upstream rate stays off the customer payload.
+    system: isOperator(user.role) ? systemSettings(user.settings) : customerSystemSettings(user.settings),
     pricing: pricingFor(user), updatedAt: new Date().toISOString() };
 }

@@ -5,7 +5,7 @@ import { Badge, Button, CopyButton, Empty, Icon, Modal, Notice, api, useApp, typ
 import { CharCount } from "@/components/ux-helpers";
 import { FilteredEmpty, NumericField } from "@/components/ux-fields";
 import { SelectField } from "@/components/select-field";
-import { PROVIDER_STATE_INFO, ROLE_INFO, SYSTEM_LIMITS, can, coverageTier, rangeError, type Permission, type ProviderState, type Role } from "@/lib/rules";
+import { PROVIDER_STATE_INFO, ROLE_INFO, SYSTEM_DEFAULTS, SYSTEM_LIMITS, can, coverageTier, rangeError, type Permission, type ProviderState, type Role } from "@/lib/rules";
 
 /* ------------------------------------------------------------------ */
 /* Security context: role, MFA and session elevation                    */
@@ -249,21 +249,29 @@ export function PackagesAdmin() {
 /* ------------------------------------------------------------------ */
 export function SystemOps() {
   const { data, refresh, notify } = useApp(); const { act, allowed, security, reload } = useAdminSecurity();
-  const [values, setValues] = useState(() => Object.fromEntries(Object.entries(data.system).map(([k, v]) => [k, String(v)])) as Record<keyof typeof SYSTEM_LIMITS, string>);
+  const [values, setValues] = useState(() => Object.fromEntries(
+    (Object.keys(SYSTEM_DEFAULTS) as (keyof typeof SYSTEM_DEFAULTS)[]).map((k) => [k, String((data.system as Record<string, number>)[k] ?? SYSTEM_DEFAULTS[k])])
+  ) as Record<keyof typeof SYSTEM_LIMITS, string>);
   const [reason, setReason] = useState(""); const [busy, setBusy] = useState(""); const [error, setError] = useState("");
   const manage = allowed("system.manage");
-  const fields: { key: keyof typeof SYSTEM_LIMITS; label: string; unit: string; hint: string }[] = [
+  const fields: { key: keyof typeof SYSTEM_LIMITS; label: string; unit: string; hint: string; adminOnly?: boolean }[] = [
     { key: "transferHours", label: "مهلت واریز سفارش", unit: "ساعت", hint: "برای سفارش‌های جدید؛ سفارش‌های قبلی تغییر نمی‌کنند." },
     { key: "graceMinutes", label: "دوره ارفاق موجودی صفر", unit: "دقیقه", hint: "صفر یعنی توقف فوری پذیرش درخواست." },
     { key: "lowBalanceCredits", label: "آستانه هشدار کمبود اعتبار مشتری", unit: "اعتبار", hint: "اعلان «اعتبار رو به اتمام» زیر این مقدار نمایش داده می‌شود." },
     { key: "maxKeys", label: "حداکثر کلید فعال هر حساب", unit: "کلید", hint: "" },
-    { key: "creditsPerCvcToken", label: "اعتبار به‌ازای هر توکن صورتحساب بالادست", unit: "اعتبار", hint: "ضریب تبدیل cost_tokens تأمین‌کننده به اعتبار داخلی پانا؛ پیش‌فرض ۱." },
+    { key: "creditsPerUsd", label: "اعتبار مشتری به‌ازای هر دلار", unit: "اعتبار", hint: "نرخ فروش به مشتری (مثلاً ۲۰ میلیون). در خرید و پیش‌فاکتور دیده می‌شود." },
+    { key: "upstreamTokensPerUsd", label: "توکن بالادست به‌ازای هر دلار", unit: "توکن", hint: "نرخ خرید از تأمین‌کننده (مثلاً ۲۵ میلیون). فقط ادمین؛ به مشتری نشان داده نمی‌شود.", adminOnly: true },
+    { key: "creditsPerCvcToken", label: "اعتبار به‌ازای هر توکن صورتحساب بالادست", unit: "اعتبار", hint: "ضریب تسویه cost_tokens → اعتبار مشتری؛ پیش‌فرض ۱. با ۲۰م/۲۵م حاشیه حدود ۲۰٪ می‌سازد.", adminOnly: true },
   ];
+  const sell = Number(values.creditsPerUsd) || 0;
+  const buy = Number(values.upstreamTokensPerUsd) || 0;
+  const margin = sell > 0 && buy > 0 ? Math.round((1 - sell / buy) * 1000) / 10 : null;
   const invalid = fields.some(f => rangeError(values[f.key], { min: SYSTEM_LIMITS[f.key][0], max: SYSTEM_LIMITS[f.key][1], required: true }));
   return <div className="settings-layout">
     <section className="panel padded"><div className="section-title"><h2>تنظیمات سیستم</h2><Badge tone="warning">حسابرسی‌شده</Badge></div>
       <form className="form-stack" onSubmit={e => { e.preventDefault(); setBusy("system"); setError(""); void act(async () => { await api("admin/system", { method: "PUT", body: { ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, Number(v)])), reason } }); await refresh(); setReason(""); notify("تنظیمات سیستم ذخیره شد."); }, setError).finally(() => setBusy("")); }}>
         {fields.map(f => <NumericField key={f.key} label={f.label} unit={f.unit} value={values[f.key]} onChange={v => setValues({ ...values, [f.key]: v })} min={SYSTEM_LIMITS[f.key][0]} max={SYSTEM_LIMITS[f.key][1]} required hint={`${f.hint} مجاز: ${fa(SYSTEM_LIMITS[f.key][0])} تا ${fa(SYSTEM_LIMITS[f.key][1])}.`} disabled={!manage} />)}
+        {margin !== null && <Notice tone="info" title="حاشیه تجاری (فقط ادمین)">با نرخ‌های فعلی حدود {fa(margin)}٪ حاشیه نسبت به بالادست دارید. عدد بالادست هرگز به مشتری نشان داده نمی‌شود.</Notice>}
         <label className="field">دلیل تغییر<textarea rows={2} value={reason} onChange={e => setReason(e.target.value)} minLength={10} maxLength={1000} required disabled={!manage} /></label>
         {error && <div className="form-error" role="alert">{error}</div>}
         <Button type="submit" busy={busy === "system"} disabled={!manage || invalid || reason.trim().length < 10}>ذخیره تنظیمات</Button>

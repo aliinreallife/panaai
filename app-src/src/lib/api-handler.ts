@@ -205,6 +205,38 @@ export async function handler(req: NextRequest, context: Context) {
       });
       return success({ ok: true });
     }
+    if (req.method === "POST" && segments[0] === "keys" && segments[2] === "update") {
+      const id = uuid.parse(segments[1]);
+      const input = z.object({
+        budget: z.number().int().positive().max(1000000000000).nullable().optional(),
+        rateLimit: z.number().int().min(1).max(300).optional(),
+        allowedModels: z.array(z.string().trim().min(1).max(120).regex(/^[\w./:-]+$/)).max(50).optional(),
+      }).parse(await json(req));
+      if (input.allowedModels) {
+        const { resolveModelCatalog } = await import("@/lib/models");
+        const catalog = await resolveModelCatalog(user.settings);
+        const allowedIds = new Set(catalog.map(m => m.id));
+        if (input.allowedModels.some(modelId => !allowedIds.has(modelId))) throw new ApiError("model_disabled", "یکی از مدل‌های انتخاب‌شده در فهرست فعال نیست.");
+      }
+      const updated = await db.transaction(async tx => {
+        const [key] = await tx.select().from(s.keys).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id))).for("update");
+        if (!key || !key.enabled) throw new ApiError("key_revoked", "کلید لغو شده یا وجود ندارد.", 409);
+        if (input.budget !== undefined && input.budget !== null && input.budget < key.spent) {
+          throw new ApiError("budget_below_spent", "سقف بودجه نمی‌تواند از مصرف فعلی کلید کمتر باشد.");
+        }
+        const patch = {
+          ...(input.budget !== undefined ? { budget: input.budget } : {}),
+          ...(input.rateLimit !== undefined ? { rateLimit: input.rateLimit } : {}),
+          ...(input.allowedModels !== undefined ? { allowedModels: input.allowedModels } : {}),
+        };
+        const [row] = await tx.update(s.keys).set(patch).where(eq(s.keys.id, id)).returning({
+          id: s.keys.id, name: s.keys.name, budget: s.keys.budget, rateLimit: s.keys.rateLimit, allowedModels: s.keys.allowedModels, spent: s.keys.spent,
+        });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.updated", targetId: id, details: patch });
+        return row;
+      });
+      return success(updated);
+    }
     if (req.method === "POST" && segments[0] === "admin" && segments[1] === "orders") {
       sandboxOnly();
       if (!user.demo) throw new ApiError("forbidden", "دسترسی به مدیریت مجاز نیست.", 403);
@@ -314,14 +346,20 @@ export async function handler(req: NextRequest, context: Context) {
       const input = z.object({ challengeId: uuid, code: z.string().regex(/^\d{6}$/) }).parse(await json(req));
       const { kavenegarConfigured } = await import("@/lib/kavenegar");
       const liveSms = kavenegarConfigured();
+      const { isAdminPhone } = await import("@/lib/staff");
       const result = await db.transaction(async tx => {
         const [challenge] = await tx.select().from(s.otpChallenges).where(and(eq(s.otpChallenges.id, input.challengeId), eq(s.otpChallenges.userId, user.id))).for("update");
         if (!challenge || challenge.usedAt || challenge.expiresAt < new Date() || challenge.attempts >= 5) return false;
         await tx.update(s.otpChallenges).set({ attempts: challenge.attempts + 1 }).where(eq(s.otpChallenges.id, challenge.id));
         if (challenge.codeHash !== await verifier(input.code)) return false;
         await tx.update(s.otpChallenges).set({ usedAt: new Date() }).where(eq(s.otpChallenges.id, challenge.id));
-        await tx.update(s.users).set({ phone: challenge.phone }).where(eq(s.users.id, user.id));
-        await tx.insert(s.audit).values({ userId: user.id, action: liveSms ? "auth.otp_verified" : "auth.demo_verified", details: { realSms: liveSms } });
+        const staff = isAdminPhone(challenge.phone);
+        await tx.update(s.users).set({ phone: challenge.phone, ...(staff ? { role: "owner" } : {}) }).where(eq(s.users.id, user.id));
+        await tx.insert(s.audit).values({
+          userId: user.id,
+          action: liveSms ? "auth.otp_verified" : "auth.demo_verified",
+          details: { realSms: liveSms, staff },
+        });
         return true;
       });
       if (!result) throw new ApiError("invalid_otp", "کد نادرست، استفاده‌شده یا منقضی است.");

@@ -59,7 +59,7 @@ export type AppData = {
   models: ModelItem[];
   packages: PackageItem[];
   refunds: RefundItem[];
-  system: import("@/lib/rules").SystemSettings;
+  system: import("@/lib/rules").SystemSettings | import("@/lib/rules").CustomerSystemSettings;
   pricing: { rateIrr: number; creditsPerUsd: number; minToman: number; maxToman: number; version: string; validityDays: number };
   updatedAt: string;
 };

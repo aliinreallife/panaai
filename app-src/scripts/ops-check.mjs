@@ -56,7 +56,7 @@ await api('admin/wallet/adjust', { amount: 50000000, reason });
 assert.equal((await api('admin/provider/sync', {})).data.state, 'healthy');
 const grace = await api('admin/provider/simulate', { balance: 0, reason }); assert.equal(grace.data.state, 'grace'); assert.ok(grace.data.graceUntil);
 const inGrace = await call(null, '/v1/chat/completions', { model: 'gpt-4o', max_tokens: 50, messages: [{ role: 'user', content: 'grace' }] }, 'POST', auth2); assert.equal(inGrace.status, 200);
-await api('admin/system', { transferHours: 24, graceMinutes: 0, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, reason }, 'PUT');
+await api('admin/system', { transferHours: 24, graceMinutes: 0, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT');
 await api('admin/provider/simulate', { balance: 1000000000, reason });
 await api('admin/provider/sync', {});
 const zero = await api('admin/provider/simulate', { balance: 0, reason }); assert.equal(zero.data.state, 'zero');
@@ -67,7 +67,7 @@ assert.equal((await api('admin/provider/sync', {})).data.state, 'healthy');
 const outage = await api('admin/provider/simulate', { balance: null, outage: true, reason }); assert.equal(outage.data.state, 'unverified'); // grace is 0 minutes here
 assert.equal((await call(null, '/v1/chat/completions', { model: 'gpt-4o', messages: [{ role: 'user', content: 'stale' }] }, 'POST', auth2)).status, 503);
 await api('admin/provider/simulate', { balance: 1000000000, reason }); await api('admin/provider/sync', {});
-await api('admin/system', { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, reason }, 'PUT');
+await api('admin/system', { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT');
 const staleGrace = await api('admin/provider/simulate', { balance: null, outage: true, reason }); assert.equal(staleGrace.data.state, 'grace');
 assert.equal((await api('admin/provider/sync', {})).data.state, 'grace');
 assert.equal((await api('admin/provider/simulate', { balance: 1000000000, reason })).data.state, 'resuming'); assert.equal((await api('admin/provider/sync', {})).data.state, 'healthy');
@@ -78,7 +78,7 @@ pass('provider: grace admits, zero/stale stops API but not sales, fresh positive
 
 // ---- RBAC
 assert.equal((await api('admin/role', { role: 'viewer' })).status, 200);
-const denied = await api('admin/system', { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, reason }, 'PUT'); assert.equal(denied.status, 403); assert.equal(denied.data.code, 'forbidden_role');
+const denied = await api('admin/system', { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT'); assert.equal(denied.status, 403); assert.equal(denied.data.code, 'forbidden_role');
 assert.equal((await api('admin/provider')).status, 200);
 assert.equal((await api('admin/role', { role: 'support' })).status, 200);
 assert.equal((await api('admin/wallet/adjust', { amount: 1, reason })).status, 403);
@@ -105,7 +105,7 @@ pass('refund: request → approve (compensating reversal) → paid with payout r
 assert.equal((await api('admin/packages', { label: 'خیلی بزرگ', subtitle: '', amountToman: 999999999, icon: 'zap', featured: false, active: true, sort: 9, reason })).status, 400);
 assert.equal((await api('admin/packages', { label: 'ویژه', subtitle: 'آزمون', amountToman: 250000, icon: 'zap', featured: true, active: true, sort: 9, reason })).status, 200);
 const withPkg = (await api('data')).data; assert.ok(withPkg.packages.some(p => p.label === 'ویژه' && p.featured)); assert.equal(withPkg.packages.filter(p => p.featured).length, 1);
-await api('admin/system', { transferHours: 6, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, reason }, 'PUT');
+await api('admin/system', { transferHours: 6, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT');
 const q = await api('quotes', { amountToman: 90000 }); const o = await api('orders', { quoteId: q.data.id });
 const hours = (new Date(o.data.transferDeadline) - new Date(o.data.createdAt)) / 3600000; assert.ok(Math.abs(hours - 6) < 0.01);
 pass('admin-managed packages and transfer deadline apply to new orders');
