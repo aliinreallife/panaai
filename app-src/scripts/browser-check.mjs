@@ -75,23 +75,17 @@ await page.getByRole('button', { name: 'ثبت رسید و ارسال برای �
 await page.getByRole('heading', { name: 'رسید شما با موفقیت ثبت شد' }).waitFor();
 pass('purchase: presets, inline errors, deadline countdown, prefilled claimed amount with match hint, receipt');
 
-// Admin: locked until OTP + TOTP elevation
+// Admin: locked until phone OTP elevation (TOTP optional)
 await page.goto(`${base}/admin`, { waitUntil: 'networkidle' });
 await page.getByText('عملیات مدیریتی قفل است').waitFor();
 const otp = await (await page.request.post(`${base}/api/v1/auth/otp/request`, { data: { phone: '09120000000' } })).json();
 assert.equal((await page.request.post(`${base}/api/v1/auth/otp/verify`, { data: { challengeId: otp.challengeId, code: otp.demoCode } })).status(), 200);
 await page.reload({ waitUntil: 'networkidle' });
 await page.getByRole('button', { name: 'تأیید هویت مدیر' }).click();
-await page.getByRole('button', { name: 'ساخت کلید TOTP' }).click();
-const totpSecret = (await page.locator('.secret-code code').innerText()).replace(/\s/g, '');
-await page.getByRole('dialog').screenshot({ path: 'artifacts/06-admin-totp-enroll.png' });
-await page.getByLabel('کد ۶ رقمی برنامه احراز هویت').fill(totpAt(totpSecret, Date.now()));
-await page.getByRole('button', { name: 'تأیید و فعال‌سازی TOTP' }).click();
-await page.getByRole('button', { name: 'باز کردن نشست مدیریتی' }).waitFor();
-await page.getByLabel('کد ۶ رقمی برنامه احراز هویت').fill(totpAt(totpSecret, Date.now() + 30000));
-await page.getByRole('button', { name: 'باز کردن نشست مدیریتی' }).click();
+await page.getByRole('dialog').getByRole('button', { name: 'باز کردن نشست مدیریتی' }).click();
 await page.getByText('نشست مدیریتی تأییدشده').waitFor();
-pass('admin elevation: demo OTP + real TOTP enrollment and one-time code');
+await page.screenshot({ path: 'artifacts/06-admin-otp-elevate.png' });
+pass('admin elevation: demo OTP opens session; TOTP remains optional');
 
 // Payment review with Persian numeric matching
 await page.locator('.admin-tabs').getByRole('button', { name: 'بررسی پرداخت‌ها' }).click();
