@@ -122,7 +122,7 @@ await page.locator('.admin-tabs').getByRole('button', { name: 'تنظیمات و
 await page.locator('.admin-tabs').getByRole('button', { name: 'قیمت‌گذاری' }).click(); await page.getByText('بسته‌های خرید').waitFor(); await shot('11-admin-pricing-packages');
 
 // Wallet notices + new event types
-assert.equal((await page.request.put(`${base}/api/v1/admin/system`, { data: { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 900000000, maxKeys: 20, reason: 'آزمون مرورگری اعلان کمبود اعتبار.' } })).status(), 200);
+assert.equal((await page.request.put(`${base}/api/v1/admin/system`, { data: { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 900000000, maxKeys: 20, creditsPerCvcToken: 1, reason: 'آزمون مرورگری اعلان کمبود اعتبار.' } })).status(), 200);
 await page.goto(`${base}/wallet`, { waitUntil: 'networkidle' });
 await page.getByText('اعتبار شما رو به اتمام است').waitFor();
 await shot('12-wallet-notices');

@@ -68,7 +68,7 @@ See `.env.example` for the full list.
 - `RECEIPT_ENCRYPTION_KEY`: 64 hex characters (a 32-byte AES key), server only. It encrypts receipts and TOTP secrets and keys the API-secret verifier. It is **required on Vercel/serverless**. Without it, a local or VPS sandbox creates `.private/sandbox.key` once, with mode 0600. Never rotate it once data exists.
 - `PLATFORM_MODE`: `live` closes the sandbox mutation surface. Anything else keeps the isolated sandbox.
 - `NEXT_PUBLIC_BRAND_NAME`: an optional brand label.
-- Optional: `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY` + `ALERT_EMAIL_FROM` (alert channels), and `CVC_BALANCE_URL` + `CVC_API_KEY` (live mode balance source, endpoint unverified).
+- Optional: `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY` + `ALERT_EMAIL_FROM` (alert channels), and CVC reseller vars: `CVC_BASE_URL`, `CVC_PRIMARY_API_KEY` (one key is enough; optional `CVC_RUNTIME_API_KEY` override; legacy `CVC_BALANCE_URL` + `CVC_API_KEY` still accepted).
 
 No external provider credential is guessed or used. There is no ZarinPal integration.
 
@@ -121,7 +121,7 @@ Research references: CVC official website and public offer (`https://cheapvibeco
 
 - **Wallet reservations** (`src/lib/wallet.ts`): every API call reserves its worst-case cost FEFO across unexpired lots with row locks (user → key → lots), settles exactly once with the actual cost, and releases on failure. Key budgets count held reservations. `admin/wallet/reconcile` releases holds older than 5 minutes and verifies lots, reservations and journal balance.
 - **Simulated gateway** (`src/lib/gateway-handler.ts`): `/v1/models`, `/v1/chat/completions`, `/v1/responses` work in sandbox with simulated responses; content is never stored. `PLATFORM_MODE=live` still fails closed.
-- **Provider state machine** (`src/lib/rules.ts`, `src/lib/provider.ts`): healthy / low / grace / zero / paused / resuming / unverified, with coverage tiers 100/75/25/0. Zero or stale balance gets one bounded grace window (system setting, default 5 min). Zero stops API admission but never sales. Sandbox balance comes from an admin simulator; live mode needs `CVC_BALANCE_URL` + `CVC_API_KEY` (endpoint shape unverified).
+- **Provider state machine** (`src/lib/rules.ts`, `src/lib/provider.ts`, `src/lib/cvc.ts`): healthy / low / grace / zero / paused / resuming / unverified, with coverage tiers 100/75/25/0. Zero or stale balance gets one bounded grace window (system setting, default 5 min). Zero stops API admission but never sales. Sandbox balance comes from an admin simulator; live mode reads `GET /v1/balance` with `CVC_PRIMARY_API_KEY`. Live inference stays fail-closed until dispatch is verified.
 - **Admin security** (`src/lib/security.ts`, `src/lib/totp.ts`): roles owner / finance / support / viewer checked server-side per route; every admin mutation needs a session elevated with demo OTP + real RFC 6238 TOTP (replay-protected, locks after 5 failures, 15 minutes).
 - **Alerts**: stored per account with per-channel delivery results. Telegram needs `TELEGRAM_BOT_TOKEN`; email (Resend) needs `RESEND_API_KEY` and `ALERT_EMAIL_FROM`.
 - **Refunds, packages, users, system settings**: refund request → approve (compensating reversal of unconsumed credits) → paid with payout reference; admin-managed purchase packages; account suspension; audited credit adjustments; transfer deadline, grace minutes, low-balance threshold and key limit settings.

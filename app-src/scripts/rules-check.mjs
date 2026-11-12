@@ -27,6 +27,9 @@ assert.deepEqual(r.allocateFefo(lots, 50, now), [{ lotId: 'a', amount: 30 }, { l
 assert.equal(r.allocateFefo(lots, 71, now), null);
 assert.deepEqual(r.splitSettlement([{ lotId: 'a', amount: 30 }, { lotId: 'b', amount: 20 }], 35).map(p => p.used), [30, 5]);
 assert.ok(r.reservationBound('gpt-4o', 10, 100) >= r.actualCost('gpt-4o', 10, 100));
+assert.equal(r.creditsFromCvcCost(12.2, 1), 13);
+assert.equal(r.creditsFromCvcCost(10, 3), 30);
+assert.ok(r.liveReservationBound(10, 100, 2, 1) >= 220);
 pass('FEFO allocation skips expired lots, never over-allocates, settles in expiry order');
 assert.equal(r.permissionFor('admin/orders/abc/approve', 'POST'), 'payments.review'); assert.equal(r.permissionFor('admin/whatever', 'POST'), null);
 assert.ok(r.can('owner', 'system.manage')); assert.ok(!r.can('finance', 'system.manage')); assert.ok(!r.can('viewer', 'payments.review')); assert.ok(r.can('support', 'users.manage'));

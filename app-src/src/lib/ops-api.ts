@@ -8,7 +8,7 @@ import { ApiError, PRICING, sandboxOnly } from "@/lib/server";
 import { authorizeAdmin, confirmMfa, demoTotp, dropElevation, elevate, enrollMfa, securityStatus } from "@/lib/security";
 import { channelConfig, evaluateProvider, listAlerts, raiseAlert } from "@/lib/provider";
 import { adjust, reconcile, reverseForRefund } from "@/lib/wallet";
-import { ROLE_INFO, SYSTEM_LIMITS, refundable, systemSettings, type Role } from "@/lib/rules";
+import { ROLE_INFO, SYSTEM_DEFAULTS, SYSTEM_LIMITS, refundable, systemSettings, type Role } from "@/lib/rules";
 
 type User = typeof s.users.$inferSelect;
 const ok = (data: unknown = { ok: true }, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -92,7 +92,28 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
     const input = z.object({ paused: z.boolean(), reason }).parse(await body());
     return ok(await evaluateProvider(user, { paused: input.paused, reason: input.reason, force: true }));
   }
-  if (route === "admin/provider/sync" && m === "POST") return ok(await evaluateProvider(user, { force: true, reason: "manual_sync" }));
+  if (route === "admin/provider/sync" && m === "POST") {
+    const view = await evaluateProvider(user, { force: true, reason: "manual_sync" });
+    const { fetchCvcModels, cvcBalanceConfigured } = await import("@/lib/cvc");
+    let models: { id: string; multiplier: number | null }[] = [];
+    let modelsSource = "skipped";
+    if (cvcBalanceConfigured()) {
+      const catalog = await fetchCvcModels();
+      if (catalog.ok) {
+        models = catalog.data.map(m => ({ id: m.id, multiplier: m.multiplier ?? m.base_multiplier ?? null }));
+        modelsSource = catalog.source;
+        await updateSettings(user, { "cvc:catalog": JSON.stringify({ data: catalog.data }) }, "provider.models_synced", { count: models.length, source: modelsSource });
+      } else {
+        modelsSource = catalog.source;
+        await db.insert(s.audit).values({ userId: user.id, action: "provider.models_sync_failed", details: { source: catalog.source, code: catalog.code } });
+      }
+    }
+    return ok({ ...view, models: { count: models.length, source: modelsSource, ids: models.map(m => m.id).slice(0, 50) } });
+  }
+  if (route === "admin/maintenance" && m === "POST") {
+    const { runMaintenance } = await import("@/lib/maintenance");
+    return ok(await runMaintenance({ reason: "admin_manual" }));
+  }
 
   /* ---- alerts & channels ---- */
   if (route === "admin/alerts" && m === "GET") return ok({ alerts: await listAlerts(user.id), channels: channelConfig(user) });
@@ -191,7 +212,14 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   /* ---- system settings ---- */
   if (route === "admin/system" && m === "PUT") {
     const int = (k: keyof typeof SYSTEM_LIMITS) => z.number().int().min(SYSTEM_LIMITS[k][0]).max(SYSTEM_LIMITS[k][1]);
-    const input = z.object({ transferHours: int("transferHours"), graceMinutes: int("graceMinutes"), lowBalanceCredits: int("lowBalanceCredits"), maxKeys: int("maxKeys"), reason }).parse(await body());
+    const input = z.object({
+      transferHours: int("transferHours"),
+      graceMinutes: int("graceMinutes"),
+      lowBalanceCredits: int("lowBalanceCredits"),
+      maxKeys: int("maxKeys"),
+      creditsPerCvcToken: int("creditsPerCvcToken").default(SYSTEM_DEFAULTS.creditsPerCvcToken),
+      reason,
+    }).parse(await body());
     const { reason: why, ...values } = input;
     await updateSettings(user, Object.fromEntries(Object.entries(values).map(([k, v]) => [`system:${k}`, String(v)])), "system.updated", { ...values, previous: systemSettings(user.settings), reason: why });
     return ok();
