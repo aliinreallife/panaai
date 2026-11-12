@@ -3,11 +3,13 @@ import { db } from "@/db";
 import { users, audit } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { ApiError, sandboxOnly } from "@/lib/server";
+import { ApiError } from "@/lib/server";
 export async function adminAction(req: NextRequest, user: typeof users.$inferSelect, route: string, getBody: () => Promise<unknown>) {
-  sandboxOnly();
-  if (!user.demo) throw new ApiError("forbidden", "مدیریت فقط برای داده‌های آزمایشی همین حساب در دسترس است.", 403);
-  const done = () => NextResponse.json({ ok: true, demo: true }, { headers: { "Cache-Control": "private, no-store" } });
+  const { isOperator } = await import("@/lib/rules");
+  const { authorizeAdmin } = await import("@/lib/security");
+  if (!isOperator(user.role)) throw new ApiError("not_found", "مسیر یافت نشد.", 404);
+  await authorizeAdmin(user, route, req.method);
+  const done = () => NextResponse.json({ ok: true, demo: false }, { headers: { "Cache-Control": "private, no-store" } });
   if (route === "admin/provider/reconcile" && req.method === "POST") {
     const input = z.object({ balance: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), reason: z.string().trim().min(10).max(1000) }).parse(await getBody());
     await db.insert(audit).values({ userId: user.id, action: "provider.manual_reconciled", details: { ...input, verified: false, source: "manual_unverified" } });
@@ -27,11 +29,14 @@ export async function adminAction(req: NextRequest, user: typeof users.$inferSel
   if (route === "admin/pricing" && req.method === "PUT") {
     const input = z.object({ rateIrr: z.number().int().min(10000).max(100000000), minToman: z.number().int().min(1000).max(5000000), maxToman: z.number().int().min(1000).max(100000000), reason: z.string().trim().min(10).max(1000) }).parse(await getBody());
     if (input.maxToman < input.minToman) throw new ApiError("invalid_range", "حداکثر مبلغ باید از حداقل بیشتر باشد.");
+    const { readPlatformPricing, writePlatformPricing } = await import("@/lib/platform-pricing");
+    const previous = await readPlatformPricing();
+    const saved = await writePlatformPricing({ rateIrr: input.rateIrr, minToman: input.minToman, maxToman: input.maxToman });
     await db.transaction(async tx => {
       const [current] = await tx.select().from(users).where(eq(users.id, user.id)).for("update");
-      const version = `demo-${Date.now()}`;
-      await tx.update(users).set({ settings: { ...current.settings, fxRateIrr: String(input.rateIrr), minToman: String(input.minToman), maxToman: String(input.maxToman), priceVersion: version } }).where(eq(users.id, user.id));
-      await tx.insert(audit).values({ userId: user.id, action: "pricing.updated", details: { ...input, version, previousRate: current.settings.fxRateIrr || "900000", source: "manual_demo", prospectiveOnly: true } });
+      // Mirror onto the operator account for older tooling; platform_state is the source of truth for all customers.
+      await tx.update(users).set({ settings: { ...current.settings, fxRateIrr: String(saved.rateIrr), minToman: String(saved.minToman), maxToman: String(saved.maxToman), priceVersion: saved.version } }).where(eq(users.id, user.id));
+      await tx.insert(audit).values({ userId: user.id, action: "pricing.updated", details: { ...input, version: saved.version, previousRate: String(previous.rateIrr), source: "manual_platform", prospectiveOnly: true, scope: "platform" } });
     });
     return done();
   }

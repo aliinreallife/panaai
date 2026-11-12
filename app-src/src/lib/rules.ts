@@ -152,6 +152,7 @@ export function permissionFor(route: string, method: string): Permission | null 
     [/^admin\/channels$/, "alerts.manage"],
     [/^admin\/users\/state$/, "users.manage"],
     [/^admin\/system$/, "system.manage"],
+    [/^admin\/payments\/destination$/, "system.manage"],
     [/^admin\/maintenance$/, "system.manage"],
   ];
   return rules.find(([pattern]) => pattern.test(route))?.[1] ?? null;
@@ -163,16 +164,58 @@ export const ELEVATION_MINUTES = 15;
 /* ------------------------------------------------------------------ */
 /* System settings                                                      */
 /* ------------------------------------------------------------------ */
-export const SYSTEM_DEFAULTS = { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1 };
-export const SYSTEM_LIMITS = { transferHours: [1, 72], graceMinutes: [0, 60], lowBalanceCredits: [0, 1000000000], maxKeys: [1, 100], creditsPerCvcToken: [1, 1000] } as const;
+/**
+ * Commercial rates (customizable in admin → system):
+ * - creditsPerUsd: what customers buy (default 20M credits / $1). Safe to show.
+ * - upstreamTokensPerUsd: what we receive from the reseller (default 25M / $1). Admin-only; never show to customers.
+ * - creditsPerCvcToken: settlement multiplier from upstream cost_tokens → customer credits (default 1).
+ * With 20M/25M and creditsPerCvcToken=1, selling fewer credits than we buy creates ~20% margin.
+ */
+export const SYSTEM_DEFAULTS = {
+  transferHours: 24,
+  graceMinutes: 5,
+  lowBalanceCredits: 2000000,
+  maxKeys: 20,
+  creditsPerCvcToken: 1,
+  creditsPerUsd: 20_000_000,
+  upstreamTokensPerUsd: 25_000_000,
+};
+export const SYSTEM_LIMITS = {
+  transferHours: [1, 72],
+  graceMinutes: [0, 60],
+  lowBalanceCredits: [0, 1000000000],
+  maxKeys: [1, 100],
+  creditsPerCvcToken: [1, 1000],
+  creditsPerUsd: [1_000_000, 100_000_000],
+  upstreamTokensPerUsd: [1_000_000, 100_000_000],
+} as const;
 export type SystemSettings = typeof SYSTEM_DEFAULTS;
+/** Fields customers may see in the app payload. Wholesale/upstream rates stay admin-only. */
+export type CustomerSystemSettings = Omit<SystemSettings, "upstreamTokensPerUsd" | "creditsPerCvcToken" | "creditsPerUsd">;
 export function systemSettings(settings: Record<string, unknown>): SystemSettings {
   const read = (key: keyof SystemSettings) => {
     const value = Number(settings[`system:${key}`]);
     const [min, max] = SYSTEM_LIMITS[key];
     return Number.isInteger(value) && value >= min && value <= max ? value : SYSTEM_DEFAULTS[key];
   };
-  return { transferHours: read("transferHours"), graceMinutes: read("graceMinutes"), lowBalanceCredits: read("lowBalanceCredits"), maxKeys: read("maxKeys"), creditsPerCvcToken: read("creditsPerCvcToken") };
+  return {
+    transferHours: read("transferHours"),
+    graceMinutes: read("graceMinutes"),
+    lowBalanceCredits: read("lowBalanceCredits"),
+    maxKeys: read("maxKeys"),
+    creditsPerCvcToken: read("creditsPerCvcToken"),
+    creditsPerUsd: read("creditsPerUsd"),
+    upstreamTokensPerUsd: read("upstreamTokensPerUsd"),
+  };
+}
+export function customerSystemSettings(settings: Record<string, unknown>): CustomerSystemSettings {
+  const all = systemSettings(settings);
+  return {
+    transferHours: all.transferHours,
+    graceMinutes: all.graceMinutes,
+    lowBalanceCredits: all.lowBalanceCredits,
+    maxKeys: all.maxKeys,
+  };
 }
 
 /* ------------------------------------------------------------------ */

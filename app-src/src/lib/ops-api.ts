@@ -4,7 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { ApiError, PRICING, sandboxOnly } from "@/lib/server";
+import { ApiError, PRICING, pricingFor, sandboxOnly } from "@/lib/server";
 import { authorizeAdmin, confirmMfa, demoTotp, dropElevation, elevate, enrollMfa, securityStatus } from "@/lib/security";
 import { channelConfig, evaluateProvider, listAlerts, raiseAlert } from "@/lib/provider";
 import { adjust, reconcile, reverseForRefund } from "@/lib/wallet";
@@ -36,7 +36,6 @@ async function updateSettings(user: User, patch: Record<string, string | boolean
 /** Customer-side operations that are not part of the original handler. Returns null when the route is not handled here. */
 export async function customerOps(req: NextRequest, user: User, route: string, body: () => Promise<unknown>) {
   if (route === "refunds" && req.method === "POST") {
-    sandboxOnly();
     const input = z.object({ orderId: uuid, reason }).parse(await body());
     const refund = await db.transaction(async tx => {
       const [order] = await tx.select().from(s.orders).where(and(eq(s.orders.id, input.orderId), eq(s.orders.userId, user.id))).for("update");
@@ -57,8 +56,6 @@ export async function customerOps(req: NextRequest, user: User, route: string, b
 
 /** Admin operations. Every route passes the server-side RBAC + MFA gate before reaching here. */
 export async function adminOps(req: NextRequest, user: User, route: string, body: () => Promise<unknown>) {
-  sandboxOnly();
-  if (!user.demo) throw new ApiError("forbidden", "مدیریت فقط برای داده‌های آزمایشی همین حساب در دسترس است.", 403);
   await authorizeAdmin(user, route, req.method);
   const seg = route.split("/");
   const m = req.method;
@@ -75,7 +72,8 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   if (route === "admin/mfa/drop" && m === "POST") { await dropElevation(user); return ok(); }
   if (route === "admin/mfa/demo-code" && m === "GET") return ok(await demoTotp(user));
   if (route === "admin/role" && m === "POST") {
-    // Sandbox role simulator, so each role's server-side restrictions can be tried. Audited.
+    // Sandbox role simulator only — not available in live.
+    sandboxOnly();
     const { role } = z.object({ role: z.enum(Object.keys(ROLE_INFO) as [Role, ...Role[]]) }).parse(await body());
     await db.transaction(async tx => {
       await tx.update(s.users).set({ role }).where(eq(s.users.id, user.id));
@@ -187,7 +185,8 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   /* ---- packages ---- */
   if (route === "admin/packages" && m === "GET") return ok(await db.select().from(s.packages).where(eq(s.packages.userId, user.id)).orderBy(asc(s.packages.sort)));
   if (seg[1] === "packages" && (m === "PUT" || m === "POST")) {
-    const pricing = { min: Number(user.settings.minToman || PRICING.minToman), max: Number(user.settings.maxToman || PRICING.maxToman) };
+    const livePricing = await pricingFor(user);
+    const pricing = { min: livePricing.minToman, max: livePricing.maxToman };
     const input = z.object({ label: z.string().trim().min(2).max(30), subtitle: z.string().trim().max(80), amountToman: z.number().int().min(pricing.min).max(pricing.max), icon: z.enum(["sparkle", "zap", "models", "wallet"]), featured: z.boolean(), active: z.boolean(), sort: z.number().int().min(0).max(99), reason }).parse(await body());
     const { reason: why, ...values } = input;
     const row = await db.transaction(async tx => {
@@ -217,6 +216,19 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
     return ok();
   }
 
+  if (route === "admin/payments/destination" && m === "GET") {
+    const { formatCardNumber, readDestinationCard } = await import("@/lib/payments");
+    const dest = await readDestinationCard();
+    return ok({ ...dest, formatted: formatCardNumber(dest.cardNumber) });
+  }
+  if (route === "admin/payments/destination" && m === "PUT") {
+    const input = z.object({ cardNumber: z.string().min(16).max(32), reason }).parse(await body());
+    const { formatCardNumber, writeDestinationCard } = await import("@/lib/payments");
+    const dest = await writeDestinationCard(input.cardNumber);
+    await db.insert(s.audit).values({ userId: user.id, action: "payments.destination_updated", details: { cardLast4: dest.cardNumber.slice(-4), reason: input.reason } });
+    return ok({ ...dest, formatted: formatCardNumber(dest.cardNumber) });
+  }
+
   /* ---- system settings ---- */
   if (route === "admin/system" && m === "PUT") {
     const int = (k: keyof typeof SYSTEM_LIMITS) => z.number().int().min(SYSTEM_LIMITS[k][0]).max(SYSTEM_LIMITS[k][1]);
@@ -226,6 +238,8 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
       lowBalanceCredits: int("lowBalanceCredits"),
       maxKeys: int("maxKeys"),
       creditsPerCvcToken: int("creditsPerCvcToken").default(SYSTEM_DEFAULTS.creditsPerCvcToken),
+      creditsPerUsd: int("creditsPerUsd").default(SYSTEM_DEFAULTS.creditsPerUsd),
+      upstreamTokensPerUsd: int("upstreamTokensPerUsd").default(SYSTEM_DEFAULTS.upstreamTokensPerUsd),
       reason,
     }).parse(await body());
     const { reason: why, ...values } = input;

@@ -26,7 +26,7 @@ assert.equal(initial.data.wallet.available, 12480000);
 const other = await call(b, '/api/v1/bootstrap', undefined, 'POST');
 assert.equal(other.status, 200); assert.notEqual(initial.data.user.id, other.data.user.id); pass('isolated browser sessions');
 const csrf = await call(a, '/api/v1/quotes', { amountToman: 90000 }, 'POST', { origin: 'https://evil.example' }); assert.equal(csrf.status, 403); pass('cross-origin mutation blocked');
-const q = await call(a, '/api/v1/quotes', { amountToman: 90000 }); assert.equal(q.status, 201); assert.equal(q.data.amountIrr, 900000); assert.equal(q.data.credits, 20000000);
+const q = await call(a, '/api/v1/quotes', { amountToman: 90000 }); assert.equal(q.status, 201); assert.equal(q.data.amountIrr, 900000); assert.equal(q.data.credits, 6545454); assert.equal(q.data.rateIrr, 2750000);
 const orders = await Promise.all([call(a, '/api/v1/orders', { quoteId: q.data.id }), call(a, '/api/v1/orders', { quoteId: q.data.id })]);
 assert.equal(orders[0].status, 201); assert.equal(orders[0].data.id, orders[1].data.id); const order = orders[0].data; pass('parallel order creation is idempotent');
 const upload = await receipt(a, order); assert.equal(upload.status, 200, JSON.stringify(upload.data)); assert.equal(upload.data.state, 'receipt_submitted');
@@ -47,7 +47,7 @@ const duplicate = await call(a, `/api/v1/admin/orders/${o2.data.id}/approve`, ap
 const afterDuplicate = await call(a, '/api/v1/data'); assert.equal(afterDuplicate.data.wallet.available,funded.data.wallet.available); pass('duplicate bank reference rolls back all credit changes');
 const immutable = await call(a, '/api/v1/quotes', { amountToman: 90000 });
 const pricing = await call(a, '/api/v1/admin/pricing', { rateIrr: 1800000, minToman: 50000, maxToman: 5000000, reason: 'Smoke test versioned prospective pricing override.' }, 'PUT'); assert.equal(pricing.status,200);
-const oldOrder = await call(a, '/api/v1/orders', { quoteId: immutable.data.id }); assert.equal(oldOrder.data.credits,20000000); assert.equal(oldOrder.data.rateIrr,900000);
+const oldOrder = await call(a, '/api/v1/orders', { quoteId: immutable.data.id }); assert.equal(oldOrder.data.credits,6545454); assert.equal(oldOrder.data.rateIrr,2750000);
 const fresh = await call(a, '/api/v1/quotes', { amountToman: 90000 }); assert.equal(fresh.data.credits,10000000); pass('FX override cannot reprice an existing quote');
 const mismatch = await receipt(a,oldOrder.data,'#aabb88',80000); assert.equal(mismatch.data.state,'needs_manual_resolution');
 const unsafe = await call(a,`/api/v1/admin/orders/${oldOrder.data.id}/approve`,{...approval,bankReference:bankReference+'-M'}); assert.equal(unsafe.status,409); pass('amount mismatch cannot silently fund a wallet');
