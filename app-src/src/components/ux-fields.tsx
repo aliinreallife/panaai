@@ -95,11 +95,46 @@ export function WalletNotices() {
   // Rendered only after client-side data load, so reading sessionStorage during init is safe.
   const [hidden, setHidden] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("pana-hidden-notices") || "[]"); } catch { return []; } });
   const hide = (id: string) => { const next = [...hidden, id]; setHidden(next); try { sessionStorage.setItem("pana-hidden-notices", JSON.stringify(next)); } catch { /* ignore */ } };
-  const items: { id: string; tone: string; title: string; text: string; href: string; action: string }[] = [];
+  const items: { id: string; tone: "danger" | "warning"; icon: string; title: string; text: string; href: string; action: string }[] = [];
   const threshold = data.system.lowBalanceCredits;
-  if (data.user.settings.lowBalance !== false && data.wallet.available < threshold) items.push({ id: `low:${threshold}`, tone: data.wallet.available <= 0 ? "danger" : "warning", title: data.wallet.available <= 0 ? "اعتبار قابل استفاده شما تمام شده است" : "اعتبار شما رو به اتمام است", text: `${compact(Math.max(0, data.wallet.available))} اعتبار قابل استفاده دارید؛ کمتر از آستانه ${compact(threshold)}. درخواست‌هایی که سقف هزینه‌شان از موجودی بیشتر باشد پذیرفته نمی‌شوند.`, href: "/purchase", action: "خرید اعتبار" });
-  if (data.user.settings.expiry !== false && data.wallet.expiring7 > 0) items.push({ id: `exp7:${data.wallet.nearestExpiry}`, tone: "warning", title: "بخشی از اعتبارتان تا ۷ روز دیگر منقضی می‌شود", text: `${compact(data.wallet.expiring7)} اعتبار${data.wallet.nearestExpiry ? ` (نزدیک‌ترین انقضا ${persianDate(data.wallet.nearestExpiry)})` : ""} زودتر از بقیه مصرف می‌شود؛ پس از انقضا قابل استفاده یا بازپرداخت نیست.`, href: "/wallet", action: "مشاهده کیف پول" });
+  if (data.user.settings.lowBalance !== false && data.wallet.available < threshold) {
+    const empty = data.wallet.available <= 0;
+    items.push({
+      id: `low:${threshold}`,
+      tone: empty ? "danger" : "warning",
+      icon: "wallet",
+      title: empty ? "اعتبار شما تمام شده است" : "اعتبار شما رو به اتمام است",
+      text: empty
+        ? `موجودی قابل استفاده صفر است. برای پذیرش درخواست‌های API، اعتبار بخرید.`
+        : `${compact(data.wallet.available)} اعتبار مانده (کمتر از آستانه ${compact(threshold)}). درخواست‌های گران‌تر از موجودی پذیرفته نمی‌شوند.`,
+      href: "/purchase",
+      action: "خرید اعتبار",
+    });
+  }
+  if (data.user.settings.expiry !== false && data.wallet.expiring7 > 0) {
+    items.push({
+      id: `exp7:${data.wallet.nearestExpiry}`,
+      tone: "warning",
+      icon: "clock",
+      title: "بخشی از اعتبار تا ۷ روز دیگر منقضی می‌شود",
+      text: `${compact(data.wallet.expiring7)} اعتبار${data.wallet.nearestExpiry ? ` · نزدیک‌ترین انقضا ${persianDate(data.wallet.nearestExpiry)}` : ""} زودتر مصرف می‌شود؛ پس از انقضا قابل استفاده نیست.`,
+      href: "/wallet",
+      action: "مشاهده کیف پول",
+    });
+  }
   const visible = items.filter(i => !hidden.includes(i.id));
   if (!visible.length) return null;
-  return <div className="wallet-notices">{visible.map(item => <div key={item.id} className={`notice notice-${item.tone} wallet-notice`} role={item.tone === "danger" ? "alert" : "status"}><Icon name={item.id.startsWith("low") ? "wallet" : "clock"} size={20} /><div><strong>{item.title}</strong><div>{item.text}</div></div><div className="wallet-notice-actions"><Link className="text-link" href={item.href}>{item.action}<Icon name="left" size={14} /></Link><button type="button" className="icon-btn" aria-label={`بستن اعلان «${item.title}»`} onClick={() => hide(item.id)}><Icon name="close" size={15} /></button></div></div>)}</div>;
+  return <div className="wallet-notices">{visible.map(item => (
+    <aside key={item.id} className={`wallet-notice wallet-notice-${item.tone}`} role={item.tone === "danger" ? "alert" : "status"}>
+      <span className="wallet-notice-icon" aria-hidden="true"><Icon name={item.icon} size={20} /></span>
+      <div className="wallet-notice-body">
+        <strong>{item.title}</strong>
+        <p>{item.text}</p>
+        <div className="wallet-notice-actions">
+          <Link className="btn btn-primary btn-small wallet-notice-cta" href={item.href}>{item.action}<Icon name="left" size={14} /></Link>
+          <button type="button" className="icon-btn" aria-label={`بستن اعلان «${item.title}»`} onClick={() => hide(item.id)}><Icon name="close" size={15} /></button>
+        </div>
+      </div>
+    </aside>
+  ))}</div>;
 }
