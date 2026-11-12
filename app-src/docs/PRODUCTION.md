@@ -39,4 +39,4 @@ These are business integrations and decisions. Each one needs an account, a cont
 4. Redeploy. The startup log must show `"event":"startup"` with `"mode":"live"` and no unexpected `startup.warning`.
 5. Clear old sandbox cookies, open the site, verify phone with an admin number (`09203050405` / `09225006434`) to become owner, enroll TOTP, then confirm a normal customer gets 404 on `/admin`.
 
-Live mode creates real (non-demo) workspaces, allows purchases/keys/admin for staff, and shows a platform-wide payment queue. Keep FX and destination card set in admin.
+Live mode requires phone OTP to enter (no anonymous guest accounts). Staff phones become owner after OTP. Purchases/keys/admin work for signed-in users; staff see a platform-wide payment queue. Keep FX and destination card set in admin.

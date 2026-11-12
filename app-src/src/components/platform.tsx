@@ -16,7 +16,8 @@ import { CommandSearch } from "@/components/command-search";
 import { isUnread, notificationsFor } from "@/lib/notifications";
 import { Breadcrumbs, CardsSkeleton, FormSkeleton, OfflineBanner, Skeleton, TableSkeleton } from "@/components/ux-helpers";
 
-let bootstrapPromise: Promise<AppData> | null = null;
+type BootstrapResult = AppData | { needsAuth: true; mode: "live" };
+let bootstrapPromise: Promise<BootstrapResult> | null = null;
 let clientCache: AppData | null = null;
 const primaryNav = [
   { id: "overview", href: "/", label: "نمای کلی", icon: "home" },
@@ -48,6 +49,7 @@ export default function Platform({ view = "overview" }: { view?: string }) {
   const [theme, setThemeState] = useState("dark"); const [range, setRangeState] = useState(30); const [mobile, setMobile] = useState(false);
   const [modal, setModal] = useState<ActiveModal>(null); const [order, setOrder] = useState<OrderItem | null>(null); const [request, setRequest] = useState<UsageItem | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null); const [baseUrl, setBaseUrl] = useState("/v1"); const [loggedOut, setLoggedOut] = useState(false); const [actionBusy, setActionBusy] = useState(false);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [sessionMode, setSessionMode] = useState<"sandbox" | "live">(() => {
     try { return sessionStorage.getItem("pana-session-mode") === "live" ? "live" : "sandbox"; } catch { return "sandbox"; }
   });
@@ -55,9 +57,19 @@ export default function Platform({ view = "overview" }: { view?: string }) {
   const load = useCallback(async () => {
     setError("");
     try {
-      if (clientCache) { setData(clientCache); return; }
-      if (!bootstrapPromise) bootstrapPromise = api<AppData>("bootstrap", { method: "POST" }).finally(() => { bootstrapPromise = null; });
-      const result = await bootstrapPromise; clientCache = result; setData(result); setSessionMode(result.mode); try { sessionStorage.setItem("pana-session-mode", result.mode); } catch { /* ignore */ } setRetryAfter(0);
+      if (clientCache) { setData(clientCache); setNeedsAuth(false); return; }
+      if (!bootstrapPromise) bootstrapPromise = api<BootstrapResult>("bootstrap", { method: "POST" }).finally(() => { bootstrapPromise = null; });
+      const result = await bootstrapPromise;
+      if ("needsAuth" in result && result.needsAuth) {
+        setNeedsAuth(true); setData(null); setSessionMode("live");
+        try { sessionStorage.setItem("pana-session-mode", "live"); } catch { /* ignore */ }
+        setRetryAfter(0);
+        return;
+      }
+      const app = result as AppData;
+      clientCache = app; setData(app); setNeedsAuth(false); setSessionMode(app.mode);
+      try { sessionStorage.setItem("pana-session-mode", app.mode); } catch { /* ignore */ }
+      setRetryAfter(0);
     } catch (e) { setError((e as Error).message); setRetryAfter((e as ApiFailure).retryAfter || 0); }
   }, []);
   const refresh = useCallback(async () => { const result = await api<AppData>("data"); clientCache = result; setData(result); }, []);
@@ -128,7 +140,7 @@ export default function Platform({ view = "overview" }: { view?: string }) {
     <div className="app-shell pana-shell" dir="rtl">{mobile && <button className="sidebar-overlay" aria-label="بستن منو" onClick={() => setMobile(false)} />}
       <aside className={`sidebar pana-rail ${mobile ? "sidebar-open" : ""}`} aria-label="ناوبری فضای کار" onClick={event => { if ((event.target as Element).closest("a")) setMobile(false); }}><div className="rail-mobile-brand"><PanaBrand /><button className="icon-btn" aria-label="بستن منو" onClick={() => setMobile(false)}><Icon name="close" /></button></div><nav className="rail-primary" aria-label="منوی اصلی">{primaryNav.map(navLink)}</nav><div className="rail-separator" /><nav className="rail-secondary" aria-label="راهنما و کیف پول">{secondaryNav.map(navLink)}{data?.account.operator && operatorNav.map(navLink)}</nav><nav className="rail-bottom" aria-label="تنظیمات و امنیت">{data?.account.operator && navLink({ id: "admin", href: "/admin", label: "مدیریت", icon: "shield" })}{navLink({ id: "settings", href: "/settings", label: "تنظیمات", icon: "settings" })}<button className="rail-link rail-exit" aria-label="خروج از حساب" disabled={!data} onClick={() => { setMobile(false); setModal("logout"); }}><Icon name="logout" size={24} /><span className="rail-label">خروج از حساب</span><span className="rail-tooltip" aria-hidden="true">خروج از حساب</span></button></nav></aside>
       <div className="workspace"><header className="topbar pana-topbar" dir="ltr"><PanaBrand /><div className="pana-header-actions"><button className="header-search" title="جست‌وجو · Ctrl/⌘+K" aria-label="باز کردن جست‌وجو" onClick={() => setModal("search")} disabled={!data}><Icon name="search" size={23} /></button><button className="icon-btn theme-button theme-cycle" title={`حالت فعلی: ${theme === "dark" ? "تیره" : theme === "light" ? "روشن" : "خودکار"} — کلیک برای تغییر`} aria-label="چرخه حالت نمایش: تیره، روشن، خودکار" onClick={cycleTheme}><Icon name={theme === "system" ? "monitor" : theme === "dark" ? "sun" : "moon"} size={20} /></button><button className="header-notifications" title="اعلان‌ها" aria-label="نمایش اعلان‌ها" onClick={() => setModal("notifications")} disabled={!data}><Icon name="bell" size={24} />{unreadCount > 0 && <span>{fa(unreadCount)}</span>}</button><span className="header-divider" /><button className="account-trigger" title="حساب کاربری" aria-label="باز کردن منوی حساب" onClick={() => setModal("account")} disabled={!data}><span className="header-avatar">{initials}</span><Icon name="down" size={18} /></button><button className="icon-btn mobile-only" onClick={() => setMobile(true)} aria-label="باز کردن منو"><Icon name="menu" size={23} /></button></div></header>
-        <main className={`main-content ${view === "overview" ? "overview-content" : "inner-content"}`} id="main-content"><OfflineBanner />{data && view !== "overview" && VIEW_META[view] ? <Breadcrumbs trail={[{ label: VIEW_META[view].crumb }]} /> : null}{loggedOut ? <section className="panel session-gate"><span className="session-gate-icon"><Icon name="secure" size={34} /></span><h1>نشست شما با امنیت پایان یافت</h1><p>نشست روی سرور لغو شد؛ سفارش‌ها و سوابق مالی حذف نشده‌اند.</p>{liveSession ? <Notice tone="info">برای ادامه، دوباره وارد شوید یا یک فضای کاری جدید بسازید. با ورود موبایل، حساب قبلی‌تان بازیابی می‌شود.</Notice> : <Notice>این پیش‌نمایش ورود واقعی ندارد. با ادامه، یک فضای آزمایشی مستقل و جدید ساخته می‌شود.</Notice>}<div className="button-row session-gate-actions"><Button onClick={() => { sessionStorage.removeItem("pana-session-ended"); setLoggedOut(false); void load(); }}>{liveSession ? "ادامه / فضای کاری جدید" : "ساخت فضای آزمایشی جدید"}<Icon name="left" size={17} /></Button>{liveSession && <Button tone="secondary" onClick={() => { sessionStorage.removeItem("pana-session-ended"); setLoggedOut(false); void load().then(() => setModal("login")); }}>ورود با موبایل</Button>}</div></section> : data ? body() : error ? <div className="load-error"><Notice tone="danger" title="بارگذاری اطلاعات انجام نشد">{error}</Notice>{retryAfter > 0 ? <RetryCountdown key={retryAfter + error} seconds={retryAfter} onRetry={() => void load()} label="تلاش دوباره" /> : <Button onClick={() => void load()}><Icon name="refresh" size={16} />تلاش دوباره</Button>}</div> : <ViewSkeleton view={view} />}</main>
+        <main className={`main-content ${view === "overview" ? "overview-content" : "inner-content"}`} id="main-content"><OfflineBanner />{data && view !== "overview" && VIEW_META[view] ? <Breadcrumbs trail={[{ label: VIEW_META[view].crumb }]} /> : null}{loggedOut ? <section className="panel session-gate"><span className="session-gate-icon"><Icon name="secure" size={34} /></span><h1>نشست شما با امنیت پایان یافت</h1><p>نشست روی سرور لغو شد؛ سفارش‌ها و سوابق مالی حذف نشده‌اند.</p>{liveSession ? <><Notice tone="info">برای بازگشت، با همان شماره موبایل وارد شوید.</Notice><div className="button-row session-gate-actions"><Button onClick={() => { sessionStorage.removeItem("pana-session-ended"); setLoggedOut(false); setNeedsAuth(true); }}>ورود با موبایل<Icon name="left" size={17} /></Button></div></> : <><Notice>این پیش‌نمایش ورود واقعی ندارد. با ادامه، یک فضای آزمایشی مستقل و جدید ساخته می‌شود.</Notice><div className="button-row session-gate-actions"><Button onClick={() => { sessionStorage.removeItem("pana-session-ended"); setLoggedOut(false); void load(); }}>ساخت فضای آزمایشی جدید<Icon name="left" size={17} /></Button></div></>}</section> : needsAuth ? <AuthGate onSuccess={async (payload) => { clientCache = payload; setData(payload); setNeedsAuth(false); setSessionMode(payload.mode); try { sessionStorage.setItem("pana-session-mode", payload.mode); sessionStorage.removeItem("pana-session-ended"); } catch { /* ignore */ } notify("ورود موفق بود."); }} /> : data ? body() : error ? <div className="load-error"><Notice tone="danger" title="بارگذاری اطلاعات انجام نشد">{error}</Notice>{retryAfter > 0 ? <RetryCountdown key={retryAfter + error} seconds={retryAfter} onRetry={() => void load()} label="تلاش دوباره" /> : <Button onClick={() => void load()}><Icon name="refresh" size={16} />تلاش دوباره</Button>}</div> : <ViewSkeleton view={view} />}</main>
       </div>
     </div>
     {data && modal === "key" && <KeyModal onClose={() => setModal(null)} />}
@@ -167,12 +179,28 @@ function StatusModal({ onClose }: { onClose: () => void }) {
     <div className="modal-actions"><Button onClick={onClose}>متوجه شدم</Button></div>
   </Modal>;
 }
-function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function LoginForm({ flow = "attach", onSuccess }: { flow?: "login" | "attach"; onSuccess: (data?: AppData) => void | Promise<void> }) {
   const [phone, setPhone] = useState(""); const [code, setCode] = useState(""); const [challenge, setChallenge] = useState<{ challengeId: string; demo?: boolean; demoCode?: string; message?: string } | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [remaining, setRemaining] = useState(0);
   useEffect(() => { if (remaining <= 0) return; const timer = setTimeout(() => setRemaining(remaining - 1), 1000); return () => clearTimeout(timer); }, [remaining]);
-  const submit = async (e: React.FormEvent) => { e.preventDefault(); setBusy(true); setError(""); try { if (!challenge) { const result = await api<{ challengeId: string; demo?: boolean; demoCode?: string; message?: string; expiresIn?: number }>("auth/otp/request", { body: { phone: ascii(phone) } }); setChallenge(result); setRemaining(result.expiresIn || 120); } else { await api("auth/otp/verify", { body: { challengeId: challenge.challengeId, code: ascii(code) } }); onSuccess(); } } catch (e) { const wait = (e as ApiFailure).retryAfter; setError(wait ? `${(e as Error).message} امکان تلاش دوباره تا ${fa(wait)} ثانیه دیگر.` : (e as Error).message); } finally { setBusy(false); } };
-  return <Modal title="ورود با شماره موبایل" description="ورود امن با کد یک‌بارمصرف پیامکی" onClose={onClose}>
-    <Notice tone={challenge && challenge.demo === false ? "success" : "warning"}>{challenge?.message || "اگر کلید کاوه‌نگار تنظیم شده باشد پیامک واقعی ارسال می‌شود؛ وگرنه کد آزمایشی همین‌جا نمایش داده می‌شود."}</Notice>
+  const requestPath = flow === "login" ? "auth/login/otp/request" : "auth/otp/request";
+  const verifyPath = flow === "login" ? "auth/login/otp/verify" : "auth/otp/verify";
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true); setError("");
+    try {
+      if (!challenge) {
+        const result = await api<{ challengeId: string; demo?: boolean; demoCode?: string; message?: string; expiresIn?: number }>(requestPath, { body: { phone: ascii(phone) } });
+        setChallenge(result); setRemaining(result.expiresIn || 120);
+      } else {
+        const verified = await api<{ ok: true; data?: AppData }>(verifyPath, { body: { challengeId: challenge.challengeId, code: ascii(code) } });
+        await onSuccess(verified.data);
+      }
+    } catch (e) {
+      const wait = (e as ApiFailure).retryAfter;
+      setError(wait ? `${(e as Error).message} امکان تلاش دوباره تا ${fa(wait)} ثانیه دیگر.` : (e as Error).message);
+    } finally { setBusy(false); }
+  };
+  return <>
+    <Notice tone={challenge && challenge.demo === false ? "success" : "info"}>{challenge?.message || (flow === "login" ? "شماره موبایل خود را وارد کنید تا کد تأیید پیامک شود." : "اگر کلید کاوه‌نگار تنظیم شده باشد پیامک واقعی ارسال می‌شود.")}</Notice>
     <form onSubmit={submit} className="form-stack">
       <label className="field">شماره موبایل<input dir="ltr" placeholder="0912 345 6789" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} required disabled={!!challenge} /></label>
       {challenge && <>
@@ -181,9 +209,22 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
         <label className="field">کد تأیید<input dir="ltr" inputMode="numeric" placeholder="------" value={code} maxLength={6} onChange={e => setCode(e.target.value)} required /></label>
       </>}
       {error && <div className="form-error" role="alert">{error}</div>}
-      <Button busy={busy} className="full-width" type="submit">{challenge ? "تأیید کد و ادامه" : "دریافت کد"}<Icon name="left" size={16} /></Button>
+      <Button busy={busy} className="full-width" type="submit">{challenge ? "تأیید کد و ورود" : "دریافت کد"}<Icon name="left" size={16} /></Button>
       {challenge && remaining <= 60 && <Button type="button" tone="ghost" onClick={() => { setChallenge(null); setCode(""); }}>دریافت کد جدید</Button>}
-      <p className="form-caption">کد ۲ دقیقه معتبر است و فقط یک‌بار قابل استفاده خواهد بود.</p>
+      <p className="form-caption">کد ۲ دقیقه معتبر است و فقط یک‌بار قابل استفاده است.</p>
     </form>
+  </>;
+}
+function AuthGate({ onSuccess }: { onSuccess: (data: AppData) => void | Promise<void> }) {
+  return <section className="panel auth-gate">
+    <div className="auth-gate-brand"><PanaBrand /></div>
+    <h1>ورود به PanaAI</h1>
+    <p>برای استفاده از پنل، با شماره موبایل وارد شوید. حساب مهمان خودکار ساخته نمی‌شود.</p>
+    <LoginForm flow="login" onSuccess={async (payload) => { if (!payload) throw new Error("ورود کامل نشد."); await onSuccess(payload); }} />
+  </section>;
+}
+function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  return <Modal title="ورود با شماره موبایل" description="ورود امن با کد یک‌بارمصرف پیامکی" onClose={onClose}>
+    <LoginForm flow="attach" onSuccess={async () => onSuccess()} />
   </Modal>;
 }

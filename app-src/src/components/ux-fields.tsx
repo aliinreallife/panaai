@@ -130,10 +130,10 @@ export function WalletNotices() {
       <div className="wallet-notice-body">
         <strong>{item.title}</strong>
         <p>{item.text}</p>
-        <div className="wallet-notice-actions">
-          <Link className="btn btn-primary btn-small wallet-notice-cta" href={item.href}>{item.action}<Icon name="left" size={14} /></Link>
-          <button type="button" className="icon-btn" aria-label={`بستن اعلان «${item.title}»`} onClick={() => hide(item.id)}><Icon name="close" size={15} /></button>
-        </div>
+      </div>
+      <div className="wallet-notice-actions">
+        <Link className="btn btn-primary btn-small wallet-notice-cta" href={item.href}>{item.action}<Icon name="left" size={14} /></Link>
+        <button type="button" className="icon-btn" aria-label={`بستن اعلان «${item.title}»`} onClick={() => hide(item.id)}><Icon name="close" size={15} /></button>
       </div>
     </aside>
   ))}</div>;

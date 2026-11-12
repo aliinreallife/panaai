@@ -51,6 +51,8 @@ export async function handler(req: NextRequest, context: Context) {
     if (route === "bootstrap" && req.method === "POST") {
       let user = await getUser();
       if (user) return success(await dataFor(user));
+      // Live: no anonymous guest accounts — client must sign in with phone OTP.
+      if (!isDemo) return success({ needsAuth: true, mode: "live" as const });
       await limit(`bootstrap:${req.headers.get("x-forwarded-for")?.split(",")[0] || "local"}`, 30, 3600000);
       const sandbox = await createSandbox(); user = sandbox.user;
       const res = success(await dataFor(user));
@@ -59,6 +61,90 @@ export async function handler(req: NextRequest, context: Context) {
       // without sharing credentials with another embedding site. Mutations also
       // require same-origin Origin/Sec-Fetch-Site validation above.
       res.cookies.set("platform_session", sandbox.token, { httpOnly: true, sameSite: secureCookie ? "none" : "lax", secure: secureCookie, partitioned: secureCookie, maxAge: 604800, path: "/" });
+      return res;
+    }
+    // Phone-first login (live): no prior session required.
+    if (route === "auth/login/otp/request" && req.method === "POST") {
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "local";
+      await limit(`login-otp:${ip}`, 8, 3600000);
+      const { phone } = z.object({ phone: z.string().regex(/^09\d{9}$/) }).parse(await json(req));
+      await limit(`login-otp-phone:${phone}`, 1, 60000);
+      const code = String(randomInt(100000, 1000000));
+      const { kavenegarConfigured, sendLookupOtp } = await import("@/lib/kavenegar");
+      const { recordSmsSend } = await import("@/lib/sms-metrics");
+      const { isAdminPhone } = await import("@/lib/staff");
+      const liveSms = kavenegarConfigured();
+      let delivery: { messageId?: string; costRial: number } = { costRial: 0 };
+      if (liveSms) {
+        try {
+          const sent = await sendLookupOtp(phone, code);
+          delivery = { messageId: sent.messageId, costRial: sent.costRial };
+          await recordSmsSend({ ok: true, costRial: sent.costRial });
+        } catch (error) {
+          await recordSmsSend({ ok: false, error: error instanceof ApiError ? error.message : "ارسال ناموفق" });
+          throw error;
+        }
+      } else {
+        await recordSmsSend({ ok: true, costRial: 0 });
+      }
+      let [account] = await db.select().from(s.users).where(eq(s.users.phone, phone)).limit(1);
+      if (!account) {
+        const staff = isAdminPhone(phone);
+        [account] = await db.insert(s.users).values({
+          name: staff ? "مدیر" : "کاربر",
+          phone,
+          demo: false,
+          role: staff ? "owner" : "customer",
+        }).returning();
+      }
+      const [challenge] = await db.insert(s.otpChallenges).values({ userId: account.id, phone, codeHash: await verifier(code), expiresAt: new Date(Date.now() + 120000) }).returning({ id: s.otpChallenges.id });
+      await db.insert(s.audit).values({
+        userId: account.id,
+        action: liveSms ? "auth.otp_sent" : "auth.otp_demo_issued",
+        targetId: challenge.id,
+        details: { provider: liveSms ? "kavenegar" : "demo", flow: "login", messageId: delivery.messageId || null, costRial: delivery.costRial },
+      });
+      return success({
+        challengeId: challenge.id,
+        demo: !liveSms,
+        demoCode: liveSms ? undefined : code,
+        expiresIn: 120,
+        message: liveSms ? "کد تأیید به شماره شما ارسال شد." : "پیامکی ارسال نشده است؛ این کد فقط برای ورود آزمایشی است.",
+      });
+    }
+    if (route === "auth/login/otp/verify" && req.method === "POST") {
+      const input = z.object({ challengeId: uuid, code: z.string().regex(/^\d{6}$/) }).parse(await json(req));
+      const { kavenegarConfigured } = await import("@/lib/kavenegar");
+      const liveSms = kavenegarConfigured();
+      const { isAdminPhone } = await import("@/lib/staff");
+      const verified = await db.transaction(async tx => {
+        const [challenge] = await tx.select().from(s.otpChallenges).where(eq(s.otpChallenges.id, input.challengeId)).for("update");
+        if (!challenge || challenge.usedAt || challenge.expiresAt < new Date() || challenge.attempts >= 5) return null;
+        await tx.update(s.otpChallenges).set({ attempts: challenge.attempts + 1 }).where(eq(s.otpChallenges.id, challenge.id));
+        if (challenge.codeHash !== await verifier(input.code)) return null;
+        await tx.update(s.otpChallenges).set({ usedAt: new Date() }).where(eq(s.otpChallenges.id, challenge.id));
+        const staff = isAdminPhone(challenge.phone);
+        const [account] = await tx.update(s.users).set({
+          phone: challenge.phone,
+          demo: false,
+          ...(staff ? { role: "owner" as const } : {}),
+        }).where(eq(s.users.id, challenge.userId)).returning();
+        if (!account) return null;
+        const token = randomBytes(32).toString("hex");
+        await tx.insert(s.sessions).values({ tokenHash: sha(token), userId: account.id, expiresAt: new Date(Date.now() + 7 * 86400000) });
+        await tx.insert(s.audit).values({
+          userId: account.id,
+          action: liveSms ? "auth.otp_verified" : "auth.demo_verified",
+          details: { realSms: liveSms, staff, flow: "login", mode: isDemo ? "sandbox" : "live" },
+        });
+        return { account, token };
+      });
+      if (!verified) throw new ApiError("invalid_otp", "کد نادرست، استفاده‌شده یا منقضی است.");
+      const { recordSmsVerified } = await import("@/lib/sms-metrics");
+      await recordSmsVerified();
+      const res = success({ ok: true, demo: isDemo && !liveSms, data: await dataFor(verified.account) });
+      const secureCookie = process.env.NODE_ENV === "production" || req.nextUrl.protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
+      res.cookies.set("platform_session", verified.token, { httpOnly: true, sameSite: secureCookie ? "none" : "lax", secure: secureCookie, partitioned: secureCookie, maxAge: 604800, path: "/" });
       return res;
     }
     const user = await requireUser();
