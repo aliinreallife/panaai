@@ -38,12 +38,19 @@ assert.equal(afterBurst.wallet.available, before.wallet.available - charged); as
 pass(`30 concurrent requests: ${ok.length} settled, ${refused.length} refused, key budget never exceeded`);
 
 // ---- Wallet cannot be overdrawn by concurrent requests
+// Free the prior key's soft allocation so an uncapped key can use the remaining wallet.
+const revokedBudgetKey = await api(`keys/${key.data.id}/revoke`, undefined, 'POST'); assert.equal(revokedBudgetKey.status, 200);
 const drain = await api('admin/wallet/adjust', { amount: -(afterBurst.wallet.available - 100000), reason }); assert.equal(drain.status, 200, JSON.stringify(drain.data));
 const key2 = await api('keys', { name: 'Overdraw key', budget: null, rateLimit: 300, allowedModels: [] });
+assert.equal(key2.status, 201, JSON.stringify(key2.data));
 const auth2 = { authorization: `Bearer ${key2.data.secret}` };
 const burst2 = await Promise.all(Array.from({ length: 20 }, (_, i) => call(null, '/v1/chat/completions', { model: 'gpt-4o', max_tokens: 200, messages: [{ role: 'user', content: `overdraw ${i}` }] }, 'POST', auth2)));
 const ok2 = burst2.filter(r => r.status === 200);
-assert.ok(burst2.filter(r => r.status !== 200).every(r => r.status === 402 && r.data.error.code === 'insufficient_credits'));
+const refused2 = burst2.filter(r => r.status !== 200);
+assert.ok(refused2.every(r =>
+  (r.status === 402 && r.data.error?.code === 'insufficient_credits')
+  || (r.status === 403 && r.data.error?.code === 'unallocated_exceeded')
+), JSON.stringify(refused2.map(r => ({ status: r.status, code: r.data?.error?.code }))));
 const charged2 = ok2.reduce((a, r) => a + r.data.usage.platform_credits, 0);
 const drained = (await api('data')).data;
 assert.equal(drained.wallet.available, 100000 - charged2); assert.ok(drained.wallet.available >= 0);
@@ -56,7 +63,8 @@ await api('admin/wallet/adjust', { amount: 50000000, reason });
 assert.equal((await api('admin/provider/sync', {})).data.state, 'healthy');
 const grace = await api('admin/provider/simulate', { balance: 0, reason }); assert.equal(grace.data.state, 'grace'); assert.ok(grace.data.graceUntil);
 const inGrace = await call(null, '/v1/chat/completions', { model: 'gpt-4o', max_tokens: 50, messages: [{ role: 'user', content: 'grace' }] }, 'POST', auth2); assert.equal(inGrace.status, 200);
-await api('admin/system', { transferHours: 24, graceMinutes: 0, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT');
+const systemBody = { transferHours: 24, graceMinutes: 0, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, cvcDelegatedTokenCap: 5000000, reason };
+await api('admin/system', systemBody, 'PUT');
 await api('admin/provider/simulate', { balance: 1000000000, reason });
 await api('admin/provider/sync', {});
 const zero = await api('admin/provider/simulate', { balance: 0, reason }); assert.equal(zero.data.state, 'zero');
@@ -67,7 +75,7 @@ assert.equal((await api('admin/provider/sync', {})).data.state, 'healthy');
 const outage = await api('admin/provider/simulate', { balance: null, outage: true, reason }); assert.equal(outage.data.state, 'unverified'); // grace is 0 minutes here
 assert.equal((await call(null, '/v1/chat/completions', { model: 'gpt-4o', messages: [{ role: 'user', content: 'stale' }] }, 'POST', auth2)).status, 503);
 await api('admin/provider/simulate', { balance: 1000000000, reason }); await api('admin/provider/sync', {});
-await api('admin/system', { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT');
+await api('admin/system', { ...systemBody, graceMinutes: 5 }, 'PUT');
 const staleGrace = await api('admin/provider/simulate', { balance: null, outage: true, reason }); assert.equal(staleGrace.data.state, 'grace');
 assert.equal((await api('admin/provider/sync', {})).data.state, 'grace');
 assert.equal((await api('admin/provider/simulate', { balance: 1000000000, reason })).data.state, 'resuming'); assert.equal((await api('admin/provider/sync', {})).data.state, 'healthy');
@@ -78,7 +86,7 @@ pass('provider: grace admits, zero/stale stops API but not sales, fresh positive
 
 // ---- RBAC
 assert.equal((await api('admin/role', { role: 'viewer' })).status, 200);
-const denied = await api('admin/system', { transferHours: 24, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT'); assert.equal(denied.status, 403); assert.equal(denied.data.code, 'forbidden_role');
+const denied = await api('admin/system', { ...systemBody, graceMinutes: 5 }, 'PUT'); assert.equal(denied.status, 403); assert.equal(denied.data.code, 'forbidden_role');
 assert.equal((await api('admin/provider')).status, 200);
 assert.equal((await api('admin/role', { role: 'support' })).status, 200);
 assert.equal((await api('admin/wallet/adjust', { amount: 1, reason })).status, 403);
@@ -105,7 +113,7 @@ pass('refund: request → approve (compensating reversal) → paid with payout r
 assert.equal((await api('admin/packages', { label: 'خیلی بزرگ', subtitle: '', amountToman: 999999999, icon: 'zap', featured: false, active: true, sort: 9, reason })).status, 400);
 assert.equal((await api('admin/packages', { label: 'ویژه', subtitle: 'آزمون', amountToman: 250000, icon: 'zap', featured: true, active: true, sort: 9, reason })).status, 200);
 const withPkg = (await api('data')).data; assert.ok(withPkg.packages.some(p => p.label === 'ویژه' && p.featured)); assert.equal(withPkg.packages.filter(p => p.featured).length, 1);
-await api('admin/system', { transferHours: 6, graceMinutes: 5, lowBalanceCredits: 2000000, maxKeys: 20, creditsPerCvcToken: 1, creditsPerUsd: 20000000, upstreamTokensPerUsd: 25000000, reason }, 'PUT');
+await api('admin/system', { ...systemBody, transferHours: 6, graceMinutes: 5 }, 'PUT');
 const q = await api('quotes', { amountToman: 90000 }); const o = await api('orders', { quoteId: q.data.id });
 const hours = (new Date(o.data.transferDeadline) - new Date(o.data.createdAt)) / 3600000; assert.ok(Math.abs(hours - 6) < 0.01);
 pass('admin-managed packages and transfer deadline apply to new orders');
