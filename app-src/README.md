@@ -19,7 +19,7 @@ The interface follows the PanaAI visual reference: a dark-by-default graphite ca
 
 - Global command search: Ctrl/⌘+K, arrow-key selection, Enter and Escape. Search is limited to this user's pages, masked key names, orders and recent request metadata.
 - All report cards, models, daily buckets, pagination and filtered CSV exports derive from the same ownership-scoped PostgreSQL usage metadata. No hardcoded model shares or synthetic previous-period comparison remain. Empty calendar days are zero-filled in Asia/Tehran; comparisons appear only when prior data exists.
-- New sandbox accounts have 1,284 individual sample request records that reconcile to 7,520,000 consumed credits, the key totals and daily summaries. Existing accounts are not silently reseeded or financially modified.
+- New sandbox accounts are empty by default. With `SANDBOX_SEED_DEMO=true` (tests only), they get 1,284 sample request records that reconcile to 7,520,000 consumed credits. Existing accounts are not silently reseeded.
 - Usage filters and chart periods are bookmarkable; obsolete fetches are canceled. CSV exports up to 10,000 matching records, independent of the current page. Request details store metadata only.
 - Interrupted orders resume from an account-scoped browser pointer. Starting a different order is explicit; existing quote/order snapshots remain immutable.
 - Notification reads persist in PostgreSQL and survive refreshes/profile edits. Settings changes lock the current user row to avoid overwriting concurrent pricing/model preferences.

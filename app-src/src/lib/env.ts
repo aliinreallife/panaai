@@ -14,6 +14,8 @@ const schema = z.object({
   RECEIPT_ENCRYPTION_KEY: hexKey.optional(),
   PLATFORM_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
   SANDBOX_OPERATOR_ACCESS: flag,
+  /** Tests only: seed fake wallet/keys/usage into new sandbox workspaces. */
+  SANDBOX_SEED_DEMO: flag,
   NEXT_PUBLIC_BRAND_NAME: z.string().max(40).optional(),
   NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional(),
@@ -45,6 +47,8 @@ const schema = z.object({
     ctx.addIssue({ code: "custom", path: ["CVC_API_KEY"], message: "CVC_BALANCE_URL requires CVC_PRIMARY_API_KEY, CVC_RUNTIME_API_KEY, or CVC_API_KEY" });
   if (env.PLATFORM_MODE === "live" && env.SANDBOX_OPERATOR_ACCESS === "true")
     ctx.addIssue({ code: "custom", path: ["SANDBOX_OPERATOR_ACCESS"], message: "must not be enabled in live mode" });
+  if (env.PLATFORM_MODE === "live" && env.SANDBOX_SEED_DEMO === "true")
+    ctx.addIssue({ code: "custom", path: ["SANDBOX_SEED_DEMO"], message: "must not be enabled in live mode" });
 });
 
 export type ServerEnv = z.infer<typeof schema>;
@@ -70,8 +74,9 @@ export function validateEnv(source: NodeJS.ProcessEnv = process.env): ServerEnv 
 /** Non-fatal launch warnings: things that work but are not ready for real customers. */
 export function launchWarnings(env: ServerEnv) {
   const warnings: string[] = [];
-  if (env.PLATFORM_MODE === "sandbox" && env.NODE_ENV === "production") warnings.push("PLATFORM_MODE=sandbox: anonymous sandbox workspaces with sample data are served. Use PLATFORM_MODE=live for the real launch.");
+  if (env.PLATFORM_MODE === "sandbox" && env.NODE_ENV === "production") warnings.push("PLATFORM_MODE=sandbox: anonymous workspaces are still created. Use PLATFORM_MODE=live for the real launch.");
   if (env.SANDBOX_OPERATOR_ACCESS === "true") warnings.push("SANDBOX_OPERATOR_ACCESS=true: every new sandbox workspace gets the admin console. Internal previews only.");
+  if (env.SANDBOX_SEED_DEMO === "true") warnings.push("SANDBOX_SEED_DEMO=true: new workspaces get fake wallet/usage. Tests only — unset for real customers.");
   const hasBalance = !!(env.CVC_PRIMARY_API_KEY || env.CVC_RUNTIME_API_KEY || env.CVC_API_KEY || env.CVC_BALANCE_URL);
   if (env.PLATFORM_MODE === "live" && !hasBalance) warnings.push("Live mode without an upstream balance source: the API stays closed (service_unavailable).");
   if (env.CVC_LIVE_DISPATCH === "true" && !hasBalance) warnings.push("CVC_LIVE_DISPATCH=true but no CVC key is configured; dispatch stays closed.");
