@@ -246,3 +246,10 @@ export const packages = pgTable("platform_packages", {
   sort: integer("sort").notNull().default(0),
   createdAt: date("created_at"),
 }, (t) => [index("packages_owner_idx").on(t.userId)]);
+
+/** Platform-wide key/value state (catalog snapshot, sync counters, etc.). Not customer-scoped. */
+export const platformState = pgTable("platform_state", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: date("updated_at"),
+});

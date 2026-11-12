@@ -27,6 +27,9 @@ export async function runMaintenance(opts: { reason?: string } = {}) {
   // Drop expired rate-limit buckets so the table cannot grow forever.
   const deletedBuckets = await db.delete(s.rateBuckets).where(lt(s.rateBuckets.expiresAt, now)).returning({ key: s.rateBuckets.key });
 
+  const { syncPlatformCatalog } = await import("@/lib/models");
+  const catalog = await syncPlatformCatalog({ reason: opts.reason === "cron" ? "maintenance_cron" : "maintenance_manual", force: true });
+
   const report = {
     at: now.toISOString(),
     reason: opts.reason ?? "scheduled",
@@ -35,6 +38,7 @@ export async function runMaintenance(opts: { reason?: string } = {}) {
     deletedUsageDayRows: deletedDays.length,
     deletedRateBuckets: deletedBuckets.length,
     retentionDays: USAGE_RETENTION_DAYS,
+    catalog: { ok: catalog.ok, count: catalog.models.length, failures: catalog.meta.failures, source: catalog.meta.source },
   };
   logger.info("maintenance.completed", report);
   // Audit against a synthetic platform marker only if there is at least one user to attach to —

@@ -18,7 +18,7 @@ export async function adminAction(req: NextRequest, user: typeof users.$inferSel
     const { cvcBalanceConfigured } = await import("@/lib/cvc");
     if (!cvcBalanceConfigured() && process.env.PLATFORM_MODE !== "sandbox") {
       await db.insert(audit).values({ userId: user.id, action: "provider.sync_requested", details: { outcome: "not_configured", verified: false } });
-      throw new ApiError("provider_status_unverified", "کلید CVC (CVC_PRIMARY_API_KEY) تنظیم نشده است. موجودی همچنان نامشخص است.", 503);
+      throw new ApiError("provider_status_unverified", "کلید تأمین‌کننده بالادست روی سرور تنظیم نشده است. موجودی همچنان نامشخص است.", 503);
     }
     const view = await evaluateProvider(user, { force: true, reason: "manual_sync" });
     await db.insert(audit).values({ userId: user.id, action: "provider.sync_requested", details: { outcome: view.source, state: view.state, verified: view.source.startsWith("cvc_") && view.balance !== null } });

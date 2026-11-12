@@ -94,21 +94,23 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   }
   if (route === "admin/provider/sync" && m === "POST") {
     const view = await evaluateProvider(user, { force: true, reason: "manual_sync" });
-    const { fetchCvcModels, cvcBalanceConfigured } = await import("@/lib/cvc");
-    let models: { id: string; multiplier: number | null }[] = [];
-    let modelsSource = "skipped";
-    if (cvcBalanceConfigured()) {
-      const catalog = await fetchCvcModels();
-      if (catalog.ok) {
-        models = catalog.data.map(m => ({ id: m.id, multiplier: m.multiplier ?? m.base_multiplier ?? null }));
-        modelsSource = catalog.source;
-        await updateSettings(user, { "cvc:catalog": JSON.stringify({ data: catalog.data }) }, "provider.models_synced", { count: models.length, source: modelsSource });
-      } else {
-        modelsSource = catalog.source;
-        await db.insert(s.audit).values({ userId: user.id, action: "provider.models_sync_failed", details: { source: catalog.source, code: catalog.code } });
-      }
+    const { syncPlatformCatalog } = await import("@/lib/models");
+    const catalog = await syncPlatformCatalog({ reason: "admin_manual_sync", force: true });
+    // Keep a per-account mirror for older tooling; platform_state is the source of truth.
+    if (catalog.ok) {
+      await updateSettings(user, { "platform:catalog": JSON.stringify({ data: catalog.models.map(m => ({ id: m.id, multiplier: m.multiplier ?? null })) }) }, "provider.models_synced", { count: catalog.models.length, source: catalog.meta.source, platform: true });
     }
-    return ok({ ...view, models: { count: models.length, source: modelsSource, ids: models.map(m => m.id).slice(0, 50) } });
+    return ok({
+      ...view,
+      models: {
+        count: catalog.models.length,
+        source: catalog.ok ? (catalog.meta.source || "platform_catalog") : catalog.reason,
+        ok: catalog.ok,
+        failures: catalog.meta.failures,
+        syncedAt: catalog.meta.syncedAt,
+        ids: catalog.models.map(m => m.id).slice(0, 50),
+      },
+    });
   }
   if (route === "admin/maintenance" && m === "POST") {
     const { runMaintenance } = await import("@/lib/maintenance");
