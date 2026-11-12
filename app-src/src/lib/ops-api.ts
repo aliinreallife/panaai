@@ -7,6 +7,7 @@ import { z } from "zod";
 import { ApiError, PRICING, isDemo, pricingFor, sandboxOnly } from "@/lib/server";
 import { authorizeAdmin, confirmMfa, demoTotp, dropElevation, elevate, enrollMfa, securityStatus } from "@/lib/security";
 import { channelConfig, evaluateProvider, listAlerts, raiseAlert } from "@/lib/provider";
+import { financialAudit } from "@/lib/financial-audit";
 import { adjust, reconcile, reverseForRefund } from "@/lib/wallet";
 import { ROLE_INFO, SYSTEM_DEFAULTS, SYSTEM_LIMITS, refundable, systemSettings, type Role } from "@/lib/rules";
 
@@ -144,8 +145,9 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
     return ok();
   }
 
-  /* ---- wallet: reconciliation & adjustments ---- */
+  /* ---- wallet: reconciliation, financial audit & adjustments ---- */
   if (route === "admin/wallet/reconcile" && m === "POST") return ok(await reconcile(user.id));
+  if (route === "admin/wallet/financial-audit" && m === "POST") return ok(await financialAudit(user.id));
   if (route === "admin/wallet/adjust" && m === "POST") {
     const input = z.object({ amount: z.number().int().refine(v => v !== 0 && Math.abs(v) <= 10000000000), reason }).parse(await body());
     const result = await adjust(user.id, input.amount, input.reason, PRICING.validityDays);

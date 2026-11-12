@@ -37,6 +37,7 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 3. `CVC_PRIMARY_API_KEY` is for **management** (mint delegated keys, catalog sync, platform balance/coverage). It is never used as the shared chat runtime key for all customers.
 4. `system.creditsPerUsd` (default 20M) is the customer purchase rate. `system.upstreamTokensPerUsd` (default 25M) is admin-only wholesale. `system.creditsPerCvcToken` (default 1) converts upstream `cost_tokens` into customer credits. `system.cvcDelegatedTokenCap` is the hard ceiling on every delegated CVC key.
 5. Streaming (`stream: true`) is rejected until SSE settlement is implemented.
+6. Admin **financial audit** (`POST admin/wallet/financial-audit`) checks separated books: FEFO lots/journal, soft key allocation vs available, key spent vs usage, approved orders vs lots, and CVC credential shape (one shared uncapped + capped per budgeted key). It only releases stale holds; it does not auto-fix balances.
 
 ## Still required for a full commercial launch
 

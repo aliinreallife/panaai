@@ -63,6 +63,13 @@ assert.equal(drained.wallet.available, 100000 - charged2); assert.ok(drained.wal
 pass(`no overdraft: ${ok2.length} of 20 admitted with 100,000 credits available`);
 const recon = await api('admin/wallet/reconcile', {}); assert.equal(recon.status, 200); assert.equal(recon.data.ok, true, JSON.stringify(recon.data));
 pass('reconciliation: lots, reservations and journal balance');
+const audit = await api('admin/wallet/financial-audit', {});
+assert.equal(audit.status, 200, JSON.stringify(audit.data));
+assert.equal(audit.data.ok, true, JSON.stringify(audit.data.findings?.filter(f => f.severity === 'error')));
+assert.equal(audit.data.buckets.keySpentTotal, audit.data.buckets.usageCreditsTotal);
+assert.ok(audit.data.buckets.unallocated === Math.max(0, audit.data.buckets.available - audit.data.buckets.allocated));
+assert.ok(Array.isArray(audit.data.findings));
+pass(`financial audit: buckets ok (avail=${audit.data.buckets.available} alloc=${audit.data.buckets.allocated} free=${audit.data.buckets.unallocated})`);
 await api('admin/wallet/adjust', { amount: 50000000, reason });
 
 // ---- Provider state machine: grace → zero → resuming → healthy
@@ -96,6 +103,7 @@ const denied = await api('admin/system', { ...systemBody, graceMinutes: 5 }, 'PU
 assert.equal((await api('admin/provider')).status, 200);
 assert.equal((await api('admin/role', { role: 'support' })).status, 200);
 assert.equal((await api('admin/wallet/adjust', { amount: 1, reason })).status, 403);
+assert.equal((await api('admin/wallet/financial-audit', {})).status, 403);
 assert.equal((await api('admin/role', { role: 'owner' })).status, 200);
 assert.equal((await api('admin/unknown-route', {})).status, 404);
 pass('RBAC enforced server-side for viewer/support; unknown admin routes denied');
