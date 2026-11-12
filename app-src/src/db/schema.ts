@@ -246,3 +246,26 @@ export const packages = pgTable("platform_packages", {
   sort: integer("sort").notNull().default(0),
   createdAt: date("created_at"),
 }, (t) => [index("packages_owner_idx").on(t.userId)]);
+
+/** Platform-wide key/value state (catalog snapshot, sync counters, etc.). Not customer-scoped. */
+export const platformState = pgTable("platform_state", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: date("updated_at"),
+});
+
+/**
+ * Per-customer upstream (reseller) runtime credential.
+ * Plaintext never leaves the server; only the encrypted blob is stored.
+ * Platform PRIMARY key creates these; customer traffic must not share one upstream key.
+ */
+export const upstreamCredentials = pgTable("platform_upstream_credentials", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  encryptedSecret: text("encrypted_secret").notNull(),
+  prefix: text("prefix").notNull(),
+  upstreamRef: text("upstream_ref"),
+  meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: date("created_at"),
+  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});

@@ -17,6 +17,7 @@ import {
 } from "@/lib/rules";
 import { MODEL_CATALOG } from "@/lib/shared";
 import { cvcLiveDispatchEnabled, proxyCvcJson } from "@/lib/cvc";
+import { ensureUserUpstreamKey } from "@/lib/upstream-keys";
 import { resolveModelCatalog } from "@/lib/models";
 import { randomUUID } from "node:crypto";
 import { logger } from "@/lib/logger";
@@ -108,9 +109,11 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     await reserve({ userId: user.id, keyId: key.id, requestId, model, amount: bound });
     reserved = true;
 
-    // 4. Dispatch: sandbox simulator, or live CVC proxy when enabled.
+    // 4. Dispatch: sandbox simulator, or live upstream proxy when enabled.
+    // Each customer wallet gets its own delegated upstream key — never one shared platform key.
     if (live) {
-      const upstream = await proxyCvcJson(path as "chat/completions" | "responses", { ...body, stream: false });
+      const upstreamCred = await ensureUserUpstreamKey(user);
+      const upstream = await proxyCvcJson(path as "chat/completions" | "responses", { ...body, stream: false }, { runtimeKey: upstreamCred.key });
       if (!upstream.ok) {
         await release(requestId);
         reserved = false;
