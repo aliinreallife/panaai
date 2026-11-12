@@ -4,7 +4,6 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
 import { mkdir } from 'node:fs/promises';
-import { totpAt } from './admin-auth.mjs';
 const base = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const scale = Number(process.env.SCREENSHOT_SCALE || 1);
 await mkdir('artifacts', { recursive: true });
