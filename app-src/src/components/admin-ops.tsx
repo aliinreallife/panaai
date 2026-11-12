@@ -263,16 +263,16 @@ export function FinancialAuditPanel() {
       await refresh();
       if (!next.ok) notify(`حسابرسی: ${fa(next.findings.filter(f => f.severity === "error").length)} مغایرت مشکوک پیدا شد.`, "error");
       else if (next.fishy) notify("حسابرسی بدون خطای سخت؛ هشدارهایی برای بررسی دارید.", "info");
-      else notify("حسابرسی مالی: همه سطل‌های جدا از هم هم‌خوان‌اند.");
+      else notify("حسابرسی مالی: همه بخش‌ها هم‌خوان‌اند.");
     }).finally(() => setBusy(false));
   };
-  return <section className="panel padded"><div className="section-title"><div><h2>حسابرسی مالی سطل‌ها</h2><p>هر سطل جدا چک می‌شود. اگر چیزی مشکوک باشد ردیف همان سطل قرمز/هشدار می‌شود — موجودی خودکار اصلاح نمی‌شود.</p></div><Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}><Icon name="secure" size={16} />اجرای حسابرسی مالی</Button></div>
+  return <section className="panel padded"><div className="section-title"><div><h2>حسابرسی مالی</h2><p>هر بخش مالی جدا چک می‌شود. اگر چیزی مشکوک باشد همان ردیف قرمز/هشدار می‌شود — موجودی خودکار اصلاح نمی‌شود.</p></div><Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}><Icon name="secure" size={16} />اجرای حسابرسی مالی</Button></div>
     {report ? <>
-      <Notice tone={!report.ok ? "danger" : report.fishy ? "warning" : "success"} title={!report.ok ? "چیز مشکوکی پیدا شد — سطل‌ها جور نیستند" : report.fishy ? "سطل‌ها بدون خطای سخت‌اند؛ هشدار دارند" : "سطل‌های جدا هم‌خوان‌اند"}>
+      <Notice tone={!report.ok ? "danger" : report.fishy ? "warning" : "success"} title={!report.ok ? "چیز مشکوکی پیدا شد — بخش‌ها جور نیستند" : report.fishy ? "بدون خطای سخت؛ هشدار دارد" : "بخش‌های مالی هم‌خوان‌اند"}>
         {fa(errors.length)} مغایرت · {fa(warns.length)} هشدار · {fa(infos.length)} اطلاع · {persianTime(report.checkedAt)}
         {!report.ok && <span className="cell-subtitle">تا اصلاح حسابرسی‌شده، به این اعداد برای تسویه اعتماد نکنید.</span>}
       </Notice>
-      <div className="table-scroll"><table><thead><tr><th>سطل</th><th>وضعیت</th><th>اعداد کنار هم</th><th>نتیجه</th></tr></thead><tbody>
+      <div className="table-scroll"><table><thead><tr><th>بخش</th><th>وضعیت</th><th>اعداد کنار هم</th><th>نتیجه</th></tr></thead><tbody>
         {(report.bucketStatus || []).map(b => <tr key={b.id} className={!b.ok ? "row-danger" : b.severity === "warn" ? "row-warn" : undefined}>
           <td><strong>{b.label}</strong><span className="cell-subtitle">{b.purpose}</span></td>
           <td><Badge tone={!b.ok ? "danger" : b.severity === "warn" ? "warning" : "success"}>{bucketBadge(b)}</Badge></td>
@@ -286,9 +286,9 @@ export function FinancialAuditPanel() {
           <strong>{f.message}</strong>
           {f.context ? <pre className="audit-json" dir="ltr">{JSON.stringify(f.context, null, 2)}</pre> : null}
         </Notice>)}
-      </div> : <p className="muted small" style={{ marginTop: "0.75rem" }}>هیچ مغایرت یا هشداری نیست. سطل‌ها از هم جدا و هم‌خوان‌اند.</p>}
+      </div> : <p className="muted small" style={{ marginTop: "0.75rem" }}>هیچ مغایرت یا هشداری نیست. بخش‌های مالی از هم جدا و هم‌خوان‌اند.</p>}
       {infos.length > 0 && <details style={{ marginTop: "0.75rem" }}><summary className="muted small">{fa(infos.length)} اطلاع (مثلاً CVC هنوز mint نشده)</summary><div className="form-stack" style={{ marginTop: "0.5rem" }}>{infos.map((f, i) => <Notice key={`info-${f.code}-${i}`} tone="info" title={f.code}>{f.message}</Notice>)}</div></details>}
-    </> : <p className="muted small">برای دیدن وضعیت هر سطل (موجودی/تخصیص، مصرف، بسته‌ها، ژورنال، سفارش، بازپرداخت، CVC) حسابرسی را اجرا کنید. نتیجه در finance.audited ثبت می‌شود.</p>}
+    </> : <p className="muted small">برای دیدن وضعیت هر بخش (موجودی/تخصیص، مصرف، بسته‌ها، ژورنال، سفارش، بازپرداخت، CVC) حسابرسی را اجرا کنید. نتیجه در finance.audited ثبت می‌شود.</p>}
   </section>;
 }
 
