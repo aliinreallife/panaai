@@ -47,7 +47,7 @@ export type ModelItem = {
   live?: boolean;
 };
 export type AppData = {
-  user: { id: string; name: string; demo: boolean; createdAt: string; settings: Record<string, boolean | string> };
+  user: { id: string; name: string; demo: boolean; phone: string | null; createdAt: string; settings: Record<string, boolean | string> };
   analytics: UsageReport;
   keys: KeyItem[]; orders: OrderItem[]; lots: LotItem[]; usage: UsageItem[]; daily: DailyItem[];
   events: { id: string; lotId: string; type: string; delta: number; description: string; createdAt: string }[];
