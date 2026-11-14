@@ -255,6 +255,33 @@ export const platformState = pgTable("platform_state", {
 });
 
 /**
+ * Desktop connect sessions for Panacode (and future clients).
+ * Browser completes login + key options; desktop exchanges a one-time code on loopback.
+ */
+export const connectSessions = pgTable("platform_connect_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientState: text("client_state").notNull().unique(),
+  redirectUri: text("redirect_uri").notNull(),
+  userId: uuid("user_id").references(() => users.id),
+  product: text("product").notNull().default("panacode"),
+  keyName: text("key_name").notNull().default("Panacode"),
+  /** null = unlimited (share unallocated); number = capped soft budget */
+  budget: bigint("budget", { mode: "number" }),
+  rateLimit: integer("rate_limit").notNull().default(60),
+  status: text("status").notNull().default("pending"),
+  exchangeCodeHash: text("exchange_code_hash"),
+  encryptedSecret: text("encrypted_secret"),
+  keyId: uuid("key_id").references(() => keys.id),
+  keyPrefix: text("key_prefix"),
+  expiresAt: date("expires_at"),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: date("created_at"),
+}, (t) => [
+  index("connect_sessions_user_idx").on(t.userId),
+  index("connect_sessions_expiry_idx").on(t.expiresAt),
+]);
+
+/**
  * Upstream (CVC) runtime credentials.
  * - kind=capped: one CVC key per budgeted PanaAI key (platform_key_id set)
  * - kind=shared_uncapped: one CVC key shared by all no-budget PanaAI keys of the user
