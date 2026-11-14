@@ -44,6 +44,10 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
 
 Wallet available **20M**. Create capped budget **5M** → unallocated **15M** (shared CVC sized ~15M). Spend **1M** on the capped key → available **19M**, unallocated still **15M**. Revoke the capped key → unallocated **19M** and shared CVC rises by ~4M (after remote delete of the capped CVC).
 
+## Operator drill (button)
+
+Admin → مالی → **آزمون کلید CVC**: one click creates labeled tokens A (capped 5M), B (uncapped), C (capped 2M), spends 1M on A, removes C, revokes A, then shows a checklist with real `pana-…` / CVC prefixes (`Token A should be revoked`, `Token C removed`, `Token B active`, shared limit raised). Automated asserts live in `scripts/cvc-finance-check.mjs`; the button is for human confirmation against Keys + CVC dashboard.
+
 ## Still required for a full commercial launch
 
 1. Confirm live balance/meter on the reseller account and keep admin rates (`creditsPerUsd` / `upstreamTokensPerUsd`) aligned with invoices.

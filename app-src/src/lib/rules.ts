@@ -143,7 +143,7 @@ export function permissionFor(route: string, method: string): Permission | null 
   if (method === "GET") return "admin.read";
   const rules: [RegExp, Permission][] = [
     [/^admin\/orders\/[^/]+\/(approve|reject|request-info)$/, "payments.review"],
-    [/^admin\/wallet\/(adjust|reconcile|financial-audit)$/, "finance.adjust"],
+    [/^admin\/wallet\/(adjust|reconcile|financial-audit|cvc-finance-drill)$/, "finance.adjust"],
     [/^admin\/refunds\/[^/]+\/(approve|reject|paid)$/, "refunds.decide"],
     [/^admin\/(pricing|packages)(\/[^/]+)?$/, "pricing.manage"],
     [/^admin\/models\/[^/]+$/, "pricing.manage"],

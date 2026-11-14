@@ -292,6 +292,97 @@ export function FinancialAuditPanel() {
   </section>;
 }
 
+type DrillCheck = {
+  id: string;
+  token: string;
+  title: string;
+  expect: string;
+  actual: string;
+  pass: boolean;
+  hint: string;
+  panaPrefix?: string | null;
+  cvcPrefix?: string | null;
+};
+type DrillToken = {
+  label: string;
+  name: string;
+  role: string;
+  panaPrefix: string;
+  cvcPrefix: string | null;
+  budget: number | null;
+  spent: number;
+  enabled: boolean;
+  status: string;
+};
+type CvcDrillReport = {
+  ranAt: string;
+  ok: boolean;
+  mode: "demo" | "live";
+  cvcConfigured: boolean;
+  scenario: string;
+  steps: string[];
+  tokens: DrillToken[];
+  checks: DrillCheck[];
+  pool: { available: number; allocated: number; unallocated: number };
+};
+
+/** One-click soft-allocation / CVC create-spend-revoke drill with a human checklist. */
+export function CvcFinanceDrillPanel() {
+  const { refresh, notify } = useApp();
+  const { act, allowed } = useAdminSecurity();
+  const [report, setReport] = useState<CvcDrillReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = () => {
+    setBusy(true);
+    void act(async () => {
+      const next = await api<CvcDrillReport>("admin/wallet/cvc-finance-drill", { method: "POST" });
+      setReport(next);
+      await refresh();
+      if (!next.ok) notify("سناریوی CVC: بعضی موارد چک‌لیست رد شدند — طبق راهنما بررسی کنید.", "error");
+      else notify("سناریوی CVC اجرا شد؛ چک‌لیست زیر را یکی‌یکی تأیید کنید.");
+    }).finally(() => setBusy(false));
+  };
+  return <section className="panel padded">
+    <div className="section-title">
+      <div>
+        <h2>آزمون کلید CVC (ساخت / مصرف / لغو)</h2>
+        <p>یک کلیک: Token A سقف‌دار، B بدون سقف، C سقف‌دار ساخته می‌شود؛ ۱M روی A مصرف، C حذف، A لغو — بعد چک‌لیست دقیق با پیشوندهای واقعی.</p>
+      </div>
+      <Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}>
+        <Icon name="keys" size={16} />اجرای سناریو و ساخت چک‌لیست
+      </Button>
+    </div>
+    {report ? <>
+      <Notice tone={report.ok ? "success" : "danger"} title={report.ok ? "سناریو از نظر سیستم پاس شد — شما هم دستی تأیید کنید" : "سناریو مغایرت دارد"}>
+        {report.scenario}
+        <span className="cell-subtitle">{report.mode} · CVC {report.cvcConfigured ? "configured" : "not configured"} · {persianTime(report.ranAt)}</span>
+      </Notice>
+      <div className="table-scroll"><table><thead><tr><th>Token</th><th>pana prefix</th><th>CVC</th><th>وضعیت مورد انتظار</th><th>spent / budget</th></tr></thead><tbody>
+        {report.tokens.map(t => <tr key={t.label} className={t.enabled && (t.label === "A" || t.label === "C") ? "row-danger" : undefined}>
+          <td><strong>Token {t.label}</strong><span className="cell-subtitle">{t.name}</span></td>
+          <td><code dir="ltr">{t.panaPrefix}…</code>{t.panaPrefix ? <CopyButton value={t.panaPrefix} label="کپی" /> : null}</td>
+          <td>{t.cvcPrefix ? <code dir="ltr">{t.cvcPrefix}</code> : <span className="muted">—</span>}</td>
+          <td><Badge tone={t.label === "B" ? (t.enabled ? "success" : "danger") : (t.enabled ? "danger" : "success")}>{t.status}</Badge><span className="cell-subtitle">{t.role}</span></td>
+          <td dir="ltr">{fa(t.spent)} / {t.budget == null ? "uncapped" : fa(t.budget)}</td>
+        </tr>)}
+      </tbody></table></div>
+      <div className="section-title" style={{ marginTop: "1rem" }}><h3>چک‌لیست دستی</h3><Badge tone={report.ok ? "success" : "danger"}>{fa(report.checks.filter(c => c.pass).length)}/{fa(report.checks.length)}</Badge></div>
+      <div className="form-stack">
+        {report.checks.map(c => <Notice key={c.id} tone={c.pass ? "success" : "danger"} title={`${c.pass ? "✓" : "✗"} ${c.title}`}>
+          <p><strong>باید ببینید:</strong> {c.expect}</p>
+          <p><strong>اندازه‌گیری شد:</strong> <span dir="ltr">{c.actual}</span></p>
+          <p className="muted small">{c.hint}</p>
+          {(c.panaPrefix || c.cvcPrefix) ? <p className="muted small" dir="ltr">pana={c.panaPrefix || "—"} · cvc={c.cvcPrefix || "—"}</p> : null}
+        </Notice>)}
+      </div>
+      <details style={{ marginTop: "0.75rem" }}><summary className="muted small">مراحل اجرا</summary><ol className="rule-list">{report.steps.map((s, i) => <li key={i} dir="ltr">{s}</li>)}</ol></details>
+      <p className="muted small" style={{ marginTop: "0.75rem" }}>
+        کیف پول الآن: available={fa(report.pool.available)} · allocated={fa(report.pool.allocated)} · unallocated={fa(report.pool.unallocated)}
+      </p>
+    </> : <p className="muted small">بعد از کلیک، سه کلید drill-* ساخته می‌شود و برای هر کدام نوشته می‌شود چه چیزی را در Keys / داشبورد CVC چک کنید (مثلاً Token A لغو، Token C حذف، Token B فعال با سقف shared بالاتر).</p>}
+  </section>;
+}
+
 /* ------------------------------------------------------------------ */
 /* Packages                                                              */
 /* ------------------------------------------------------------------ */
