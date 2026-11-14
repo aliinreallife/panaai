@@ -345,11 +345,11 @@ export function CvcFinanceDrillPanel() {
   return <section className="panel padded">
     <div className="section-title">
       <div>
-        <h2>آزمون کلید CVC (ساخت / مصرف / لغو)</h2>
-        <p>یک کلیک: Token A سقف‌دار، B بدون سقف، C سقف‌دار ساخته می‌شود؛ ۱M روی A مصرف، C حذف، A لغو — بعد چک‌لیست دقیق با پیشوندهای واقعی.</p>
+        <h2>آزمون کلی CVC</h2>
+        <p>یک کلیک: Token A سقف‌دار، B بدون سقف، C سقف‌دار ساخته می‌شود؛ ۱M روی A مصرف، C حذف، A لغو — بعد چک‌لیست با پیشوندهای واقعی pana-… برای تأیید دستی.</p>
       </div>
-      <Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}>
-        <Icon name="keys" size={16} />اجرای سناریو و ساخت چک‌لیست
+      <Button tone={report && !report.ok ? "danger" : "primary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}>
+        <Icon name="keys" size={16} />اجرای آزمون کلی
       </Button>
     </div>
     {report ? <>
