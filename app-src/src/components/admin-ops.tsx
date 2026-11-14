@@ -340,7 +340,7 @@ export function SystemOps() {
     { key: "creditsPerUsd", label: "اعتبار مشتری به‌ازای هر دلار", unit: "اعتبار", hint: "نرخ فروش به مشتری (مثلاً ۲۰ میلیون). در خرید و پیش‌فاکتور دیده می‌شود." },
     { key: "upstreamTokensPerUsd", label: "توکن بالادست به‌ازای هر دلار", unit: "توکن", hint: "نرخ خرید از تأمین‌کننده (مثلاً ۲۵ میلیون). فقط ادمین؛ به مشتری نشان داده نمی‌شود.", adminOnly: true },
     { key: "creditsPerCvcToken", label: "اعتبار به‌ازای هر توکن صورتحساب بالادست", unit: "اعتبار", hint: "ضریب تسویه cost_tokens → اعتبار مشتری؛ پیش‌فرض ۱. با ۲۰م/۲۵م حاشیه حدود ۲۰٪ می‌سازد.", adminOnly: true },
-    { key: "cvcDelegatedTokenCap", label: "سقف توکن کلید بالادست (CVC)", unit: "توکن", hint: "سقف اجباری هر کلید delegated؛ اگر مشتری بودجه نگذارد هم همین سقف اعمال می‌شود. هرگز unlimited ساخته نمی‌شود.", adminOnly: true },
+    { key: "cvcDelegatedTokenCap", label: "سقف ایمنی توکن کلید بالادست (CVC)", unit: "توکن", hint: "سقف ایمنی؛ اندازهٔ واقعی کلید مشترک/سقف‌دار از اعتبار آزاد یا بودجهٔ کلید می‌آید (تقریباً ۱:۱). هرگز unlimited ساخته نمی‌شود.", adminOnly: true },
   ];
   const sell = Number(values.creditsPerUsd) || 0;
   const buy = Number(values.upstreamTokensPerUsd) || 0;

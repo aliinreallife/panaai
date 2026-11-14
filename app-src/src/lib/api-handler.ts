@@ -263,23 +263,28 @@ export async function handler(req: NextRequest, context: Context) {
       const allowedIds = new Set(catalog.map(m => m.id));
       if (input.allowedModels.some(id => !allowedIds.has(id))) throw new ApiError("model_disabled", "یکی از مدل‌های انتخاب‌شده در فهرست فعال نیست.");
       // Soft allocation: key budgets earmark wallet credits without debiting lots.
-      const pool = await walletAllocation(user.id);
-      if (input.budget != null && input.budget > pool.unallocated) {
-        throw new ApiError(
-          "allocation_exceeded",
-          `سقف بودجه نمی‌تواند از اعتبار تخصیص‌نیافته (${pool.unallocated.toLocaleString("fa-IR")}) بیشتر باشد.`,
-          409,
-        );
-      }
       const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const created = await db.transaction(async tx => {
         await tx.select().from(s.users).where(eq(s.users.id, user.id)).for("update");
-        const existing = await tx.select({ id: s.keys.id }).from(s.keys).where(and(eq(s.keys.userId, user.id), eq(s.keys.enabled, true)));
+        const lots = await tx.select({ remaining: s.lots.remaining, reserved: s.lots.reserved }).from(s.lots)
+          .where(and(eq(s.lots.userId, user.id), gt(s.lots.expiresAt, new Date())));
+        const activeKeys = await tx.select({ id: s.keys.id, budget: s.keys.budget, spent: s.keys.spent, enabled: s.keys.enabled })
+          .from(s.keys).where(and(eq(s.keys.userId, user.id), eq(s.keys.enabled, true)));
+        const available = lots.reduce((sum, lot) => sum + Math.max(0, lot.remaining - lot.reserved), 0);
+        const allocated = sumKeyAllocations(activeKeys);
+        const unallocated = unallocatedCredits(available, allocated);
+        if (input.budget != null && input.budget > unallocated) {
+          throw new ApiError(
+            "allocation_exceeded",
+            `سقف بودجه نمی‌تواند از اعتبار تخصیص‌نیافته (${unallocated.toLocaleString("fa-IR")}) بیشتر باشد.`,
+            409,
+          );
+        }
         const maxKeys = systemSettings(user.settings).maxKeys;
-        if (existing.length >= maxKeys) throw new ApiError("key_limit", `حداکثر ${maxKeys.toLocaleString("fa-IR")} کلید فعال مجاز است.`);
+        if (activeKeys.length >= maxKeys) throw new ApiError("key_limit", `حداکثر ${maxKeys.toLocaleString("fa-IR")} کلید فعال مجاز است.`);
         const [key] = await tx.insert(s.keys).values({ ...input, userId: user.id, prefix: secret.slice(0, 16), verifier: hash }).returning({ id: s.keys.id, name: s.keys.name, prefix: s.keys.prefix });
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, allocated: pool.allocated, unallocated: pool.unallocated } });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, allocated, unallocated } });
         return key;
       });
       // Capped key → own CVC key. Uncapped keys → one shared CVC per user.
@@ -309,7 +314,8 @@ export async function handler(req: NextRequest, context: Context) {
             kind: provisioned.kind,
             budget: input.budget ?? null,
           });
-          if (input.budget == null) await syncUpstreamTokenLimitSafe(user, "key_budget");
+          // Always rebalance shared pool — capped creates shrink unallocated and must shrink shared CVC too.
+          await syncUpstreamTokenLimitSafe(user, "key_budget");
         } else {
           logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
         }
@@ -340,9 +346,13 @@ export async function handler(req: NextRequest, context: Context) {
       const [revoked] = await db.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id), eq(s.keys.enabled, true))).returning({ id: s.keys.id, budget: s.keys.budget });
       if (revoked) await db.insert(s.audit).values({ userId: user.id, action: "key.revoked", targetId: id });
       if (!isDemo && revoked) {
-        const { revokeCappedUpstream, syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
-        if (revoked.budget != null) await revokeCappedUpstream(revoked.id, user.id);
-        await syncUpstreamTokenLimitSafe(user, "key_revoke");
+        const { remoteRevokeFreesUpstreamPool, revokeCappedUpstream, syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+        let allowGrow = true;
+        if (revoked.budget != null) {
+          const { remote } = await revokeCappedUpstream(revoked.id, user.id);
+          allowGrow = remoteRevokeFreesUpstreamPool(remote);
+        }
+        await syncUpstreamTokenLimitSafe(user, "key_revoke", { allowGrow });
       }
       return success({ ok: true });
     }
@@ -395,18 +405,21 @@ export async function handler(req: NextRequest, context: Context) {
       if (!isDemo && input.budget !== undefined) {
         const {
           ensureUpstreamForPlatformKey,
+          remoteRevokeFreesUpstreamPool,
           revokeCappedUpstream,
           syncCappedKeyLimit,
           syncUpstreamTokenLimitSafe,
         } = await import("@/lib/upstream-keys");
+        let allowGrow = true;
         if (updated.budget != null) {
           const ensured = await ensureUpstreamForPlatformKey(user, { platformKeyId: updated.id, budget: updated.budget, reason: "budget_change" });
           if (!ensured.created) await syncCappedKeyLimit(user, updated.id, updated.budget, "key_budget");
         } else {
-          await revokeCappedUpstream(updated.id, user.id);
+          const { remote } = await revokeCappedUpstream(updated.id, user.id);
+          allowGrow = remoteRevokeFreesUpstreamPool(remote);
           await ensureUpstreamForPlatformKey(user, { platformKeyId: updated.id, budget: null, reason: "budget_change" });
         }
-        await syncUpstreamTokenLimitSafe(user, "key_budget");
+        await syncUpstreamTokenLimitSafe(user, "key_budget", { allowGrow });
       }
       return success(updated);
     }
