@@ -292,6 +292,97 @@ export function FinancialAuditPanel() {
   </section>;
 }
 
+type DrillCheck = {
+  id: string;
+  token: string;
+  title: string;
+  expect: string;
+  actual: string;
+  pass: boolean;
+  hint: string;
+  panaPrefix?: string | null;
+  cvcPrefix?: string | null;
+};
+type DrillToken = {
+  label: string;
+  name: string;
+  role: string;
+  panaPrefix: string;
+  cvcPrefix: string | null;
+  budget: number | null;
+  spent: number;
+  enabled: boolean;
+  status: string;
+};
+type CvcDrillReport = {
+  ranAt: string;
+  ok: boolean;
+  mode: "demo" | "live";
+  cvcConfigured: boolean;
+  scenario: string;
+  steps: string[];
+  tokens: DrillToken[];
+  checks: DrillCheck[];
+  pool: { available: number; allocated: number; unallocated: number };
+};
+
+/** One-click soft-allocation / CVC create-spend-revoke drill with a human checklist. */
+export function CvcFinanceDrillPanel() {
+  const { refresh, notify } = useApp();
+  const { act, allowed } = useAdminSecurity();
+  const [report, setReport] = useState<CvcDrillReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = () => {
+    setBusy(true);
+    void act(async () => {
+      const next = await api<CvcDrillReport>("admin/wallet/cvc-finance-drill", { method: "POST" });
+      setReport(next);
+      await refresh();
+      if (!next.ok) notify("سناریوی CVC: بعضی موارد چک‌لیست رد شدند — طبق راهنما بررسی کنید.", "error");
+      else notify("سناریوی CVC اجرا شد؛ چک‌لیست زیر را یکی‌یکی تأیید کنید.");
+    }).finally(() => setBusy(false));
+  };
+  return <section className="panel padded">
+    <div className="section-title">
+      <div>
+        <h2>آزمون کلید CVC (ساخت / مصرف / لغو)</h2>
+        <p>یک کلیک: Token A سقف‌دار، B بدون سقف، C سقف‌دار ساخته می‌شود؛ ۱M روی A مصرف، C حذف، A لغو — بعد چک‌لیست دقیق با پیشوندهای واقعی.</p>
+      </div>
+      <Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}>
+        <Icon name="keys" size={16} />اجرای سناریو و ساخت چک‌لیست
+      </Button>
+    </div>
+    {report ? <>
+      <Notice tone={report.ok ? "success" : "danger"} title={report.ok ? "سناریو از نظر سیستم پاس شد — شما هم دستی تأیید کنید" : "سناریو مغایرت دارد"}>
+        {report.scenario}
+        <span className="cell-subtitle">{report.mode} · CVC {report.cvcConfigured ? "configured" : "not configured"} · {persianTime(report.ranAt)}</span>
+      </Notice>
+      <div className="table-scroll"><table><thead><tr><th>Token</th><th>pana prefix</th><th>CVC</th><th>وضعیت مورد انتظار</th><th>spent / budget</th></tr></thead><tbody>
+        {report.tokens.map(t => <tr key={t.label} className={t.enabled && (t.label === "A" || t.label === "C") ? "row-danger" : undefined}>
+          <td><strong>Token {t.label}</strong><span className="cell-subtitle">{t.name}</span></td>
+          <td><code dir="ltr">{t.panaPrefix}…</code>{t.panaPrefix ? <CopyButton value={t.panaPrefix} label="کپی" /> : null}</td>
+          <td>{t.cvcPrefix ? <code dir="ltr">{t.cvcPrefix}</code> : <span className="muted">—</span>}</td>
+          <td><Badge tone={t.label === "B" ? (t.enabled ? "success" : "danger") : (t.enabled ? "danger" : "success")}>{t.status}</Badge><span className="cell-subtitle">{t.role}</span></td>
+          <td dir="ltr">{fa(t.spent)} / {t.budget == null ? "uncapped" : fa(t.budget)}</td>
+        </tr>)}
+      </tbody></table></div>
+      <div className="section-title" style={{ marginTop: "1rem" }}><h3>چک‌لیست دستی</h3><Badge tone={report.ok ? "success" : "danger"}>{fa(report.checks.filter(c => c.pass).length)}/{fa(report.checks.length)}</Badge></div>
+      <div className="form-stack">
+        {report.checks.map(c => <Notice key={c.id} tone={c.pass ? "success" : "danger"} title={`${c.pass ? "✓" : "✗"} ${c.title}`}>
+          <p><strong>باید ببینید:</strong> {c.expect}</p>
+          <p><strong>اندازه‌گیری شد:</strong> <span dir="ltr">{c.actual}</span></p>
+          <p className="muted small">{c.hint}</p>
+          {(c.panaPrefix || c.cvcPrefix) ? <p className="muted small" dir="ltr">pana={c.panaPrefix || "—"} · cvc={c.cvcPrefix || "—"}</p> : null}
+        </Notice>)}
+      </div>
+      <details style={{ marginTop: "0.75rem" }}><summary className="muted small">مراحل اجرا</summary><ol className="rule-list">{report.steps.map((s, i) => <li key={i} dir="ltr">{s}</li>)}</ol></details>
+      <p className="muted small" style={{ marginTop: "0.75rem" }}>
+        کیف پول الآن: available={fa(report.pool.available)} · allocated={fa(report.pool.allocated)} · unallocated={fa(report.pool.unallocated)}
+      </p>
+    </> : <p className="muted small">بعد از کلیک، سه کلید drill-* ساخته می‌شود و برای هر کدام نوشته می‌شود چه چیزی را در Keys / داشبورد CVC چک کنید (مثلاً Token A لغو، Token C حذف، Token B فعال با سقف shared بالاتر).</p>}
+  </section>;
+}
+
 /* ------------------------------------------------------------------ */
 /* Packages                                                              */
 /* ------------------------------------------------------------------ */
@@ -340,7 +431,7 @@ export function SystemOps() {
     { key: "creditsPerUsd", label: "اعتبار مشتری به‌ازای هر دلار", unit: "اعتبار", hint: "نرخ فروش به مشتری (مثلاً ۲۰ میلیون). در خرید و پیش‌فاکتور دیده می‌شود." },
     { key: "upstreamTokensPerUsd", label: "توکن بالادست به‌ازای هر دلار", unit: "توکن", hint: "نرخ خرید از تأمین‌کننده (مثلاً ۲۵ میلیون). فقط ادمین؛ به مشتری نشان داده نمی‌شود.", adminOnly: true },
     { key: "creditsPerCvcToken", label: "اعتبار به‌ازای هر توکن صورتحساب بالادست", unit: "اعتبار", hint: "ضریب تسویه cost_tokens → اعتبار مشتری؛ پیش‌فرض ۱. با ۲۰م/۲۵م حاشیه حدود ۲۰٪ می‌سازد.", adminOnly: true },
-    { key: "cvcDelegatedTokenCap", label: "سقف توکن کلید بالادست (CVC)", unit: "توکن", hint: "سقف اجباری هر کلید delegated؛ اگر مشتری بودجه نگذارد هم همین سقف اعمال می‌شود. هرگز unlimited ساخته نمی‌شود.", adminOnly: true },
+    { key: "cvcDelegatedTokenCap", label: "سقف ایمنی توکن کلید بالادست (CVC)", unit: "توکن", hint: "سقف ایمنی؛ اندازهٔ واقعی کلید مشترک/سقف‌دار از اعتبار آزاد یا بودجهٔ کلید می‌آید (تقریباً ۱:۱). هرگز unlimited ساخته نمی‌شود.", adminOnly: true },
   ];
   const sell = Number(values.creditsPerUsd) || 0;
   const buy = Number(values.upstreamTokensPerUsd) || 0;

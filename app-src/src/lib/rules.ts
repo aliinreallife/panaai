@@ -143,7 +143,7 @@ export function permissionFor(route: string, method: string): Permission | null 
   if (method === "GET") return "admin.read";
   const rules: [RegExp, Permission][] = [
     [/^admin\/orders\/[^/]+\/(approve|reject|request-info)$/, "payments.review"],
-    [/^admin\/wallet\/(adjust|reconcile|financial-audit)$/, "finance.adjust"],
+    [/^admin\/wallet\/(adjust|reconcile|financial-audit|cvc-finance-drill)$/, "finance.adjust"],
     [/^admin\/refunds\/[^/]+\/(approve|reject|paid)$/, "refunds.decide"],
     [/^admin\/(pricing|packages)(\/[^/]+)?$/, "pricing.manage"],
     [/^admin\/models\/[^/]+$/, "pricing.manage"],
@@ -179,8 +179,12 @@ export const SYSTEM_DEFAULTS = {
   creditsPerCvcToken: 1,
   creditsPerUsd: 20_000_000,
   upstreamTokensPerUsd: 25_000_000,
-  /** Hard ceiling for every CVC delegated key mint. Never mint unlimited upstream keys. */
-  cvcDelegatedTokenCap: 5_000_000,
+  /**
+   * Safety ceiling for every CVC delegated key. Soft-allocation sizes shared/capped keys
+   * to wallet unallocated/budget 1:1 (via creditsPerCvcToken); this cap only blocks absurd
+   * upstream allowances. Never mint a true unlimited CVC key.
+   */
+  cvcDelegatedTokenCap: 100_000_000,
 };
 export const SYSTEM_LIMITS = {
   transferHours: [1, 72],
@@ -190,7 +194,7 @@ export const SYSTEM_LIMITS = {
   creditsPerCvcToken: [1, 1000],
   creditsPerUsd: [1_000_000, 100_000_000],
   upstreamTokensPerUsd: [1_000_000, 100_000_000],
-  cvcDelegatedTokenCap: [1_000, 100_000_000],
+  cvcDelegatedTokenCap: [1_000, 1_000_000_000],
 } as const;
 export type SystemSettings = typeof SYSTEM_DEFAULTS;
 /** Fields customers may see in the app payload. Wholesale/upstream rates stay admin-only. */
@@ -228,6 +232,26 @@ export function resolveCvcTokenLimit(creditPool: number | null | undefined, sett
   return platformCap;
 }
 
+/**
+ * Absolute lifetime limit for a budgeted (capped) CVC key.
+ * Budget is the total lifetime allowance — do NOT add tokensUsed on top (that over-issues).
+ */
+export function desiredCappedTokenLimit(budget: number, tokensUsed: number, settings: SystemSettings): number {
+  const lifetime = resolveCvcTokenLimit(budget, settings);
+  const used = Math.max(0, Math.floor(tokensUsed));
+  return Math.max(used + 1, lifetime);
+}
+
+/**
+ * Lifetime limit for the shared uncapped CVC key.
+ * `unallocated` is remaining free credits, so lifetime = used + remaining allowance.
+ */
+export function desiredSharedTokenLimit(unallocated: number, tokensUsed: number, settings: SystemSettings): number {
+  const remaining = resolveCvcTokenLimit(unallocated, settings);
+  const used = Math.max(0, Math.floor(tokensUsed));
+  return Math.max(used + 1, used + remaining);
+}
+
 /** Remaining earmark for a limited key (0 if unlimited or revoked). */
 export function keyAllocationRemaining(key: { budget: number | null; spent: number; enabled?: boolean }): number {
   if (key.enabled === false) return 0;
@@ -243,6 +267,17 @@ export function sumKeyAllocations(keys: Array<{ budget: number | null; spent: nu
 /** Credits still free for new key budgets or unlimited-key spend. */
 export function unallocatedCredits(available: number, allocated: number): number {
   return Math.max(0, available - Math.max(0, allocated));
+}
+
+/**
+ * Whether a remote capped-CVC revoke freed upstream capacity enough to safely raise the shared pool.
+ * - deleted / missing / skipped → pool may grow
+ * - frozen / failed → capped allowance may still exist upstream; never raise shared (avoid double-issue)
+ */
+export function remoteRevokeFreesUpstreamPool(
+  remote: "deleted" | "frozen" | "failed" | "skipped" | "missing",
+): boolean {
+  return remote === "deleted" || remote === "missing" || remote === "skipped";
 }
 export function customerSystemSettings(settings: Record<string, unknown>): CustomerSystemSettings {
   const all = systemSettings(settings);

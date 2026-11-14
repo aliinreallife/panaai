@@ -148,6 +148,10 @@ export async function adminOps(req: NextRequest, user: User, route: string, body
   /* ---- wallet: reconciliation, financial audit & adjustments ---- */
   if (route === "admin/wallet/reconcile" && m === "POST") return ok(await reconcile(user.id));
   if (route === "admin/wallet/financial-audit" && m === "POST") return ok(await financialAudit(user.id));
+  if (route === "admin/wallet/cvc-finance-drill" && m === "POST") {
+    const { runCvcFinanceDrill } = await import("@/lib/cvc-finance-drill");
+    return ok(await runCvcFinanceDrill(user));
+  }
   if (route === "admin/wallet/adjust" && m === "POST") {
     const input = z.object({ amount: z.number().int().refine(v => v !== 0 && Math.abs(v) <= 10000000000), reason }).parse(await body());
     const result = await adjust(user.id, input.amount, input.reason, PRICING.validityDays);

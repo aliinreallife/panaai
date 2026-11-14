@@ -5,7 +5,8 @@ import * as s from "@/db/schema";
 import { createDelegatedKey, cvcConfig, editDelegatedKey } from "@/lib/cvc";
 import { ApiError, decryptImage, encryptImage } from "@/lib/server";
 import { logger } from "@/lib/logger";
-import { resolveCvcTokenLimit, systemSettings } from "@/lib/rules";
+import { desiredCappedTokenLimit, desiredSharedTokenLimit, remoteRevokeFreesUpstreamPool, resolveCvcTokenLimit, systemSettings } from "@/lib/rules";
+export { remoteRevokeFreesUpstreamPool };
 import { walletAllocation } from "@/lib/wallet";
 
 type User = typeof s.users.$inferSelect;
@@ -162,39 +163,54 @@ async function insertCred(user: User, opts: {
       ? minted.data.meta.key_id
       : null;
   const tokensUsed = metaNumber(minted.data.meta, "tokens_used", "tokensUsed") ?? 0;
-  const [row] = await db.insert(s.upstreamCredentials).values({
-    userId: user.id,
-    platformKeyId: opts.platformKeyId,
-    kind: opts.kind,
-    encryptedSecret,
-    prefix,
-    upstreamRef,
-    meta: {
-      source: minted.source,
-      mintedAt: new Date().toISOString(),
-      reason: opts.reason,
-      tokenLimit,
-      tokensUsed,
-      budgetCredits: opts.budgetCredits ?? null,
+  try {
+    const [row] = await db.insert(s.upstreamCredentials).values({
+      userId: user.id,
       platformKeyId: opts.platformKeyId,
       kind: opts.kind,
-    },
-  }).returning();
-  await db.insert(s.audit).values({
-    userId: user.id,
-    action: "upstream_key.provisioned",
-    targetId: opts.platformKeyId ?? user.id,
-    details: { prefix, upstreamRef, source: minted.source, reason: opts.reason, tokenLimit, kind: opts.kind },
-  });
-  logger.info("upstream_key.minted", {
-    userId: user.id,
-    kind: opts.kind,
-    platformKeyId: opts.platformKeyId,
-    reason: opts.reason,
-    prefix,
-    tokenLimit,
-  });
-  return row;
+      encryptedSecret,
+      prefix,
+      upstreamRef,
+      meta: {
+        source: minted.source,
+        mintedAt: new Date().toISOString(),
+        reason: opts.reason,
+        tokenLimit,
+        tokensUsed,
+        budgetCredits: opts.budgetCredits ?? null,
+        platformKeyId: opts.platformKeyId,
+        kind: opts.kind,
+      },
+    }).returning();
+    await db.insert(s.audit).values({
+      userId: user.id,
+      action: "upstream_key.provisioned",
+      targetId: opts.platformKeyId ?? user.id,
+      details: { prefix, upstreamRef, source: minted.source, reason: opts.reason, tokenLimit, kind: opts.kind },
+    });
+    logger.info("upstream_key.minted", {
+      userId: user.id,
+      kind: opts.kind,
+      platformKeyId: opts.platformKeyId,
+      reason: opts.reason,
+      prefix,
+      tokenLimit,
+    });
+    return row;
+  } catch (error) {
+    // Unique race or DB failure after a paid CVC mint — delete the orphan upstream key.
+    const deleted = await editDelegatedKey({ key: minted.data.key, delete: true });
+    logger.error("upstream_key.insert_failed_orphan_cleanup", {
+      userId: user.id,
+      kind: opts.kind,
+      platformKeyId: opts.platformKeyId,
+      prefix,
+      deleted: deleted.ok,
+      deleteCode: deleted.ok ? null : deleted.code,
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    throw error;
+  }
 }
 
 async function decryptRow(row: UpstreamRow) {
@@ -318,18 +334,66 @@ export async function relinkCappedUpstream(oldPlatformKeyId: string, newPlatform
   return row ?? null;
 }
 
-/** Soft-revoke a capped upstream row when its PanaAI key is revoked (CVC delete is PRD D31). */
+/**
+ * Revoke a capped upstream row when its PanaAI key is revoked/converted.
+ * Deletes (preferred) or freezes the CVC key remotely so shared rebalance cannot double-issue.
+ */
 export async function revokeCappedUpstream(platformKeyId: string, userId: string) {
   await ensureUpstreamTable();
+  const existing = await readCapped(platformKeyId);
+  if (!existing || existing.userId !== userId) return { row: null, remote: "missing" as const };
+
+  let remote: "deleted" | "frozen" | "failed" | "skipped" = "skipped";
+  const cfg = cvcConfig();
+  if (cfg.primaryKey) {
+    let plaintext: string | null = null;
+    try {
+      plaintext = await decryptSecret(existing.encryptedSecret);
+    } catch {
+      logger.error("upstream_key.decrypt_failed", { userId, platformKeyId, reason: "revoke_capped" });
+    }
+    if (plaintext) {
+      const deleted = await editDelegatedKey({ key: plaintext, delete: true });
+      if (deleted.ok) {
+        remote = "deleted";
+      } else {
+        const frozen = await editDelegatedKey({ key: plaintext, active: false });
+        remote = frozen.ok ? "frozen" : "failed";
+        if (!frozen.ok) {
+          logger.error("upstream_key.revoke_remote_failed", {
+            userId,
+            platformKeyId,
+            deleteCode: deleted.code,
+            freezeCode: frozen.code,
+          });
+        }
+      }
+    } else {
+      remote = "failed";
+    }
+  }
+
   const [row] = await db.update(s.upstreamCredentials).set({
     revokedAt: new Date(),
+    meta: {
+      ...existing.meta,
+      revokedRemote: remote,
+      revokedAt: new Date().toISOString(),
+    },
   }).where(and(
-    eq(s.upstreamCredentials.userId, userId),
-    eq(s.upstreamCredentials.platformKeyId, platformKeyId),
-    eq(s.upstreamCredentials.kind, "capped"),
+    eq(s.upstreamCredentials.id, existing.id),
     isNull(s.upstreamCredentials.revokedAt),
   )).returning();
-  return row ?? null;
+
+  if (row) {
+    await db.insert(s.audit).values({
+      userId,
+      action: "upstream_key.revoked",
+      targetId: platformKeyId,
+      details: { kind: "capped", remote, prefix: row.prefix },
+    });
+  }
+  return { row: row ?? null, remote };
 }
 
 /**
@@ -339,6 +403,7 @@ export async function revokeCappedUpstream(platformKeyId: string, userId: string
 export async function syncSharedUncappedLimit(
   user: User,
   reason: "wallet_topup" | "key_revoke" | "key_budget" | "manual" = "manual",
+  opts: { allowGrow?: boolean } = {},
 ): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null }> {
   const cfg = cvcConfig();
   if (!cfg.primaryKey) return { synced: false, tokenLimit: null, previousLimit: null };
@@ -348,11 +413,22 @@ export async function syncSharedUncappedLimit(
 
   const settings = systemSettings(user.settings);
   const pool = await walletAllocation(user.id);
-  const desiredRemaining = resolveCvcTokenLimit(pool.unallocated, settings);
-  const previousLimit = metaNumber(row.meta, "tokenLimit", "token_limit") ?? desiredRemaining;
   const tokensUsed = metaNumber(row.meta, "tokensUsed", "tokens_used") ?? 0;
-  const desiredLimit = Math.max(tokensUsed + 1, tokensUsed + desiredRemaining);
+  const previousLimit = metaNumber(row.meta, "tokenLimit", "token_limit")
+    ?? desiredSharedTokenLimit(pool.unallocated, tokensUsed, settings);
+  const desiredLimit = desiredSharedTokenLimit(pool.unallocated, tokensUsed, settings);
   if (desiredLimit === previousLimit) {
+    return { synced: false, tokenLimit: previousLimit, previousLimit };
+  }
+  // Never raise shared while a capped CVC key may still hold upstream capacity (failed/frozen revoke).
+  if (desiredLimit > previousLimit && opts.allowGrow === false) {
+    logger.warn("upstream_key.sync_grow_blocked", {
+      userId: user.id,
+      reason,
+      previousLimit,
+      desiredLimit,
+      unallocated: pool.unallocated,
+    });
     return { synced: false, tokenLimit: previousLimit, previousLimit };
   }
 
@@ -431,10 +507,11 @@ export async function syncCappedKeyLimit(
   const row = await readCapped(platformKeyId);
   if (!row) return { synced: false as const, tokenLimit: null };
   const settings = systemSettings(user.settings);
-  const desiredRemaining = resolveCvcTokenLimit(budget, settings);
-  const previousLimit = metaNumber(row.meta, "tokenLimit", "token_limit") ?? desiredRemaining;
   const tokensUsed = metaNumber(row.meta, "tokensUsed", "tokens_used") ?? 0;
-  const desiredLimit = Math.max(tokensUsed + 1, tokensUsed + desiredRemaining);
+  const previousLimit = metaNumber(row.meta, "tokenLimit", "token_limit")
+    ?? desiredCappedTokenLimit(budget, tokensUsed, settings);
+  // Absolute lifetime from budget — never tokensUsed + budget (that over-issues after spend).
+  const desiredLimit = desiredCappedTokenLimit(budget, tokensUsed, settings);
   if (desiredLimit === previousLimit) return { synced: false as const, tokenLimit: previousLimit };
 
   let plaintext: string;
@@ -462,9 +539,13 @@ export async function syncCappedKeyLimit(
 /** @deprecated alias — syncs shared uncapped only */
 export const syncUpstreamTokenLimit = syncSharedUncappedLimit;
 
-export async function syncUpstreamTokenLimitSafe(user: User, reason: Parameters<typeof syncSharedUncappedLimit>[1]) {
+export async function syncUpstreamTokenLimitSafe(
+  user: User,
+  reason: Parameters<typeof syncSharedUncappedLimit>[1],
+  opts?: Parameters<typeof syncSharedUncappedLimit>[2],
+) {
   try {
-    return await syncSharedUncappedLimit(user, reason);
+    return await syncSharedUncappedLimit(user, reason, opts);
   } catch (error) {
     logger.error("upstream_key.sync_exception", {
       userId: user.id,
