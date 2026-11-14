@@ -147,10 +147,83 @@ export async function handler(req: NextRequest, context: Context) {
       res.cookies.set("platform_session", verified.token, { httpOnly: true, sameSite: secureCookie ? "none" : "lax", secure: secureCookie, partitioned: secureCookie, maxAge: 604800, path: "/" });
       return res;
     }
+    // Panacode desktop exchange: no browser session; one-time code from loopback callback.
+    if (route === "connect/panacode/exchange" && req.method === "POST") {
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "local";
+      await limit(`connect-exchange:${ip}`, 30, 3600000);
+      const input = z.object({
+        code: z.string().min(8).max(200),
+        state: z.string().min(8).max(128),
+      }).parse(await json(req));
+      const { exchangeConnectCode } = await import("@/lib/connect-panacode");
+      const result = await exchangeConnectCode(input);
+      const origin = req.nextUrl.origin;
+      return success({
+        ...result,
+        baseURL: `${origin}/v1`,
+      });
+    }
+    if (route === "connect/panacode/session" && req.method === "POST") {
+      // Allow anonymous start so the connect page can bind state before login.
+      const input = z.object({
+        state: z.string().min(8).max(128),
+        redirectUri: z.string().url().max(300),
+        product: z.string().trim().min(2).max(40).optional(),
+        keyName: z.string().trim().min(2).max(50).optional(),
+        budget: z.number().int().positive().max(1000000000000).nullable().optional(),
+        rateLimit: z.number().int().min(1).max(300).optional(),
+      }).parse(await json(req));
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "local";
+      await limit(`connect-session:${ip}`, 40, 3600000);
+      const user = await getUser();
+      const { upsertConnectSession } = await import("@/lib/connect-panacode");
+      const row = await upsertConnectSession({
+        clientState: input.state,
+        redirectUri: input.redirectUri,
+        product: input.product,
+        keyName: input.keyName,
+        budget: input.budget,
+        rateLimit: input.rateLimit,
+        userId: user?.id ?? null,
+      });
+      return success({
+        id: row.id,
+        status: row.status,
+        expiresAt: row.expiresAt.toISOString(),
+        authenticated: !!user,
+      });
+    }
     const user = await requireUser();
     const PRICING = await pricingFor(user);
     await limit(`requests:${user.id}`, 180);
-    if (req.method !== "GET" && user.state === "suspended" && ["quotes", "orders", "keys", "refunds"].includes(segments[0])) throw new ApiError("account_suspended", "حساب شما معلق است؛ ثبت سفارش، کلید یا درخواست جدید ممکن نیست. با پشتیبانی تماس بگیرید.", 403);
+    if (req.method !== "GET" && user.state === "suspended" && ["quotes", "orders", "keys", "refunds", "connect"].includes(segments[0])) throw new ApiError("account_suspended", "حساب شما معلق است؛ ثبت سفارش، کلید یا درخواست جدید ممکن نیست. با پشتیبانی تماس بگیرید.", 403);
+    if (route === "connect/panacode/attach" && req.method === "POST") {
+      const input = z.object({ state: z.string().min(8).max(128) }).parse(await json(req));
+      const { attachConnectUser, connectStatusForUser } = await import("@/lib/connect-panacode");
+      await attachConnectUser(input.state, user.id);
+      return success(await connectStatusForUser(input.state, user.id));
+    }
+    if (route === "connect/panacode/status" && req.method === "GET") {
+      const state = z.string().min(8).max(128).parse(req.nextUrl.searchParams.get("state"));
+      const { connectStatusForUser } = await import("@/lib/connect-panacode");
+      return success(await connectStatusForUser(state, user.id));
+    }
+    if (route === "connect/panacode/complete" && req.method === "POST") {
+      const input = z.object({
+        state: z.string().min(8).max(128),
+        keyName: z.string().trim().min(2).max(50).optional(),
+        budget: z.number().int().positive().max(1000000000000).nullable().optional(),
+        rateLimit: z.number().int().min(1).max(300).optional(),
+      }).parse(await json(req));
+      const { completeConnectSession } = await import("@/lib/connect-panacode");
+      return success(await completeConnectSession({
+        clientState: input.state,
+        user,
+        keyName: input.keyName,
+        budget: input.budget,
+        rateLimit: input.rateLimit,
+      }));
+    }
     if (segments[0] === "admin") {
       const { adminOps } = await import("@/lib/ops-api");
       const handled = await adminOps(req, user, route, () => json(req));
