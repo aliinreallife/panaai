@@ -52,7 +52,17 @@ export type AppData = {
   keys: KeyItem[]; orders: OrderItem[]; lots: LotItem[]; usage: UsageItem[]; daily: DailyItem[];
   events: { id: string; lotId: string; type: string; delta: number; description: string; createdAt: string }[];
   audit: AuditItem[]; tickets: TicketItem[];
-  wallet: { available: number; reserved: number; expiring7: number; expiring: number; nearestExpiry: string | null };
+  wallet: {
+    available: number;
+    reserved: number;
+    /** Remaining budgets earmarked to active limited API keys (not deducted from lots). */
+    allocated: number;
+    /** available − allocated; free for new budgets or unlimited keys. */
+    unallocated: number;
+    expiring7: number;
+    expiring: number;
+    nearestExpiry: string | null;
+  };
   service: { state: import("@/lib/rules").ProviderState; admits: boolean; checkedAt: string | null };
   account: { state: string; role: string; operator: boolean };
   mode: "sandbox" | "live";

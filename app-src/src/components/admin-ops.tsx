@@ -228,6 +228,70 @@ export function ReconcilePanel() {
   </section>;
 }
 
+type AuditFinding = { code: string; severity: "error" | "warn" | "info"; bucket: string; message: string; context?: Record<string, unknown> };
+type BucketStatus = {
+  id: string; label: string; purpose: string; ok: boolean; severity: "error" | "warn" | "info" | "ok"; summary: string;
+  figures: { label: string; value: number; highlight?: boolean }[];
+};
+type FinancialAudit = {
+  checkedAt: string;
+  ok: boolean;
+  fishy: boolean;
+  buckets: { available: number; reserved: number; allocated: number; unallocated: number; keySpentTotal: number; usageCreditsTotal: number };
+  bucketStatus: BucketStatus[];
+  identity: Record<string, boolean>;
+  findings: AuditFinding[];
+  counts: { activeKeys: number; budgetedKeys: number; uncappedKeys: number; upstreamShared: number; upstreamCapped: number; approvedOrders: number; refunds: number };
+  walletReconcile: Recon;
+};
+const severityTone = (s: AuditFinding["severity"] | BucketStatus["severity"]) => s === "error" ? "danger" as const : s === "warn" ? "warning" as const : s === "ok" || s === "info" ? (s === "ok" ? "success" as const : "info" as const) : "info" as const;
+const severityLabel = (s: AuditFinding["severity"]) => s === "error" ? "مشکوک / خطا" : s === "warn" ? "هشدار" : "اطلاع";
+const bucketBadge = (b: BucketStatus) => b.ok ? (b.severity === "warn" ? "هشدار" : "سالم") : "مغایرت";
+/** Cross-bucket financial integrity check. Fishy mismatches must be obvious. Does not auto-fix. */
+export function FinancialAuditPanel() {
+  const { refresh, notify } = useApp(); const { act, allowed } = useAdminSecurity();
+  const [report, setReport] = useState<FinancialAudit | null>(null); const [busy, setBusy] = useState(false);
+  const errors = report?.findings.filter(f => f.severity === "error") ?? [];
+  const warns = report?.findings.filter(f => f.severity === "warn") ?? [];
+  const infos = report?.findings.filter(f => f.severity === "info") ?? [];
+  const fishyFindings = [...errors, ...warns];
+  const run = () => {
+    setBusy(true);
+    void act(async () => {
+      const next = await api<FinancialAudit>("admin/wallet/financial-audit", { method: "POST" });
+      setReport(next);
+      await refresh();
+      if (!next.ok) notify(`حسابرسی: ${fa(next.findings.filter(f => f.severity === "error").length)} مغایرت مشکوک پیدا شد.`, "error");
+      else if (next.fishy) notify("حسابرسی بدون خطای سخت؛ هشدارهایی برای بررسی دارید.", "info");
+      else notify("حسابرسی مالی: همه بخش‌ها هم‌خوان‌اند.");
+    }).finally(() => setBusy(false));
+  };
+  return <section className="panel padded"><div className="section-title"><div><h2>حسابرسی مالی</h2><p>هر بخش مالی جدا چک می‌شود. اگر چیزی مشکوک باشد همان ردیف قرمز/هشدار می‌شود — موجودی خودکار اصلاح نمی‌شود.</p></div><Button tone={report && !report.ok ? "danger" : "secondary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}><Icon name="secure" size={16} />اجرای حسابرسی مالی</Button></div>
+    {report ? <>
+      <Notice tone={!report.ok ? "danger" : report.fishy ? "warning" : "success"} title={!report.ok ? "چیز مشکوکی پیدا شد — بخش‌ها جور نیستند" : report.fishy ? "بدون خطای سخت؛ هشدار دارد" : "بخش‌های مالی هم‌خوان‌اند"}>
+        {fa(errors.length)} مغایرت · {fa(warns.length)} هشدار · {fa(infos.length)} اطلاع · {persianTime(report.checkedAt)}
+        {!report.ok && <span className="cell-subtitle">تا اصلاح حسابرسی‌شده، به این اعداد برای تسویه اعتماد نکنید.</span>}
+      </Notice>
+      <div className="table-scroll"><table><thead><tr><th>بخش</th><th>وضعیت</th><th>اعداد کنار هم</th><th>نتیجه</th></tr></thead><tbody>
+        {(report.bucketStatus || []).map(b => <tr key={b.id} className={!b.ok ? "row-danger" : b.severity === "warn" ? "row-warn" : undefined}>
+          <td><strong>{b.label}</strong><span className="cell-subtitle">{b.purpose}</span></td>
+          <td><Badge tone={!b.ok ? "danger" : b.severity === "warn" ? "warning" : "success"}>{bucketBadge(b)}</Badge></td>
+          <td>{b.figures.map(f => <span key={f.label} className={`cell-main${f.highlight ? " warning-text" : ""}`}>{f.label}: <strong>{fa(f.value)}</strong></span>)}</td>
+          <td className={!b.ok ? "warning-text" : "muted"}>{b.summary}</td>
+        </tr>)}
+      </tbody></table></div>
+      {fishyFindings.length ? <div className="form-stack" style={{ marginTop: "1rem" }}>
+        <div className="section-title"><h3>یافته‌های مشکوک / هشدار</h3><Badge tone={errors.length ? "danger" : "warning"}>{fa(fishyFindings.length)}</Badge></div>
+        {fishyFindings.map((f, i) => <Notice key={`${f.code}-${i}`} tone={severityTone(f.severity)} title={`${severityLabel(f.severity)} · ${f.code}`}>
+          <strong>{f.message}</strong>
+          {f.context ? <pre className="audit-json" dir="ltr">{JSON.stringify(f.context, null, 2)}</pre> : null}
+        </Notice>)}
+      </div> : <p className="muted small" style={{ marginTop: "0.75rem" }}>هیچ مغایرت یا هشداری نیست. بخش‌های مالی از هم جدا و هم‌خوان‌اند.</p>}
+      {infos.length > 0 && <details style={{ marginTop: "0.75rem" }}><summary className="muted small">{fa(infos.length)} اطلاع (مثلاً CVC هنوز mint نشده)</summary><div className="form-stack" style={{ marginTop: "0.5rem" }}>{infos.map((f, i) => <Notice key={`info-${f.code}-${i}`} tone="info" title={f.code}>{f.message}</Notice>)}</div></details>}
+    </> : <p className="muted small">برای دیدن وضعیت هر بخش (موجودی/تخصیص، مصرف، بسته‌ها، ژورنال، سفارش، بازپرداخت، CVC) حسابرسی را اجرا کنید. نتیجه در finance.audited ثبت می‌شود.</p>}
+  </section>;
+}
+
 /* ------------------------------------------------------------------ */
 /* Packages                                                              */
 /* ------------------------------------------------------------------ */
@@ -276,6 +340,7 @@ export function SystemOps() {
     { key: "creditsPerUsd", label: "اعتبار مشتری به‌ازای هر دلار", unit: "اعتبار", hint: "نرخ فروش به مشتری (مثلاً ۲۰ میلیون). در خرید و پیش‌فاکتور دیده می‌شود." },
     { key: "upstreamTokensPerUsd", label: "توکن بالادست به‌ازای هر دلار", unit: "توکن", hint: "نرخ خرید از تأمین‌کننده (مثلاً ۲۵ میلیون). فقط ادمین؛ به مشتری نشان داده نمی‌شود.", adminOnly: true },
     { key: "creditsPerCvcToken", label: "اعتبار به‌ازای هر توکن صورتحساب بالادست", unit: "اعتبار", hint: "ضریب تسویه cost_tokens → اعتبار مشتری؛ پیش‌فرض ۱. با ۲۰م/۲۵م حاشیه حدود ۲۰٪ می‌سازد.", adminOnly: true },
+    { key: "cvcDelegatedTokenCap", label: "سقف توکن کلید بالادست (CVC)", unit: "توکن", hint: "سقف اجباری هر کلید delegated؛ اگر مشتری بودجه نگذارد هم همین سقف اعمال می‌شود. هرگز unlimited ساخته نمی‌شود.", adminOnly: true },
   ];
   const sell = Number(values.creditsPerUsd) || 0;
   const buy = Number(values.upstreamTokensPerUsd) || 0;

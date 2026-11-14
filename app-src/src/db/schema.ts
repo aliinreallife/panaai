@@ -255,12 +255,16 @@ export const platformState = pgTable("platform_state", {
 });
 
 /**
- * Per-customer upstream (reseller) runtime credential.
+ * Upstream (CVC) runtime credentials.
+ * - kind=capped: one CVC key per budgeted PanaAI key (platform_key_id set)
+ * - kind=shared_uncapped: one CVC key shared by all no-budget PanaAI keys of the user
  * Plaintext never leaves the server; only the encrypted blob is stored.
- * Platform PRIMARY key creates these; customer traffic must not share one upstream key.
  */
-export const upstreamCredentials = pgTable("platform_upstream_credentials", {
-  userId: uuid("user_id").primaryKey().references(() => users.id),
+export const upstreamCredentials = pgTable("platform_upstream_key_creds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  platformKeyId: uuid("platform_key_id").references(() => keys.id),
+  kind: text("kind").notNull(), // 'capped' | 'shared_uncapped'
   encryptedSecret: text("encrypted_secret").notNull(),
   prefix: text("prefix").notNull(),
   upstreamRef: text("upstream_ref"),

@@ -20,6 +20,10 @@ pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 input,textarea,select{min-width:0;color:var(--text)}
 ::selection{background:#bfddcb;color:#174e37}
 .muted{color:var(--muted)}.small{font-size:var(--fs-sm)}.success-text{color:var(--green)}.warning-text{color:var(--warning)}.full-width{width:100%}
+tbody tr.row-danger{background:color-mix(in srgb, var(--danger, #b42318) 10%, transparent)}
+tbody tr.row-warn{background:color-mix(in srgb, var(--warning) 10%, transparent)}
+tbody tr.row-danger:hover,tbody tr.row-warn:hover{filter:brightness(0.98)}
+.cell-main{display:block;font-size:var(--fs-xs)}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);border:0;white-space:nowrap}
 .skip-link{position:fixed;top:-100px;right:280px;background:var(--green);color:#fff;padding:10px 20px;z-index:1000;border-radius:7px}.skip-link:focus{top:10px}
 .mobile-only{display:none!important}

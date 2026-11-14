@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { randomBytes, randomInt } from "node:crypto";
 import sharp from "sharp";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { getUsageReport, exportUsage, reportOptions } from "@/lib/analytics";
 import { ApiError, PRICING, createSandbox, dataFor, isDemo, decryptImage, encryptImage, getUser, limit, requireUser, sha, verifier, pricingFor } from "@/lib/server";
-import { isOperator } from "@/lib/rules";
+import { isOperator, sumKeyAllocations, systemSettings, unallocatedCredits } from "@/lib/rules";
 import { ascii } from "@/lib/shared";
-import { systemSettings } from "@/lib/rules";
 import { logger } from "@/lib/logger";
+import { walletAllocation } from "@/lib/wallet";
 
 type Context = { params: Promise<{ path: string[] }> };
 const uuid = z.string().uuid();
@@ -262,18 +262,14 @@ export async function handler(req: NextRequest, context: Context) {
       const catalog = await resolveModelCatalog(user.settings);
       const allowedIds = new Set(catalog.map(m => m.id));
       if (input.allowedModels.some(id => !allowedIds.has(id))) throw new ApiError("model_disabled", "یکی از مدل‌های انتخاب‌شده در فهرست فعال نیست.");
-      // Live: mint the per-wallet CVC upstream credential at key creation (not only on first chat).
-      let upstreamProvisioned = false;
-      if (!isDemo) {
-        const { cvcConfig } = await import("@/lib/cvc");
-        if (cvcConfig().primaryKey) {
-          const { ensureUserUpstreamKey } = await import("@/lib/upstream-keys");
-          const provisioned = await ensureUserUpstreamKey(user);
-          upstreamProvisioned = true;
-          logger.info("upstream_key.ready_on_platform_key_create", { userId: user.id, created: provisioned.created, prefix: provisioned.prefix });
-        } else {
-          logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
-        }
+      // Soft allocation: key budgets earmark wallet credits without debiting lots.
+      const pool = await walletAllocation(user.id);
+      if (input.budget != null && input.budget > pool.unallocated) {
+        throw new ApiError(
+          "allocation_exceeded",
+          `سقف بودجه نمی‌تواند از اعتبار تخصیص‌نیافته (${pool.unallocated.toLocaleString("fa-IR")}) بیشتر باشد.`,
+          409,
+        );
       }
       const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
@@ -283,41 +279,71 @@ export async function handler(req: NextRequest, context: Context) {
         const maxKeys = systemSettings(user.settings).maxKeys;
         if (existing.length >= maxKeys) throw new ApiError("key_limit", `حداکثر ${maxKeys.toLocaleString("fa-IR")} کلید فعال مجاز است.`);
         const [key] = await tx.insert(s.keys).values({ ...input, userId: user.id, prefix: secret.slice(0, 16), verifier: hash }).returning({ id: s.keys.id, name: s.keys.name, prefix: s.keys.prefix });
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, upstreamProvisioned } });
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.created", targetId: key.id, details: { name: input.name, allocated: pool.allocated, unallocated: pool.unallocated } });
         return key;
       });
-      return success({ ...created, secret, upstreamProvisioned }, 201);
-    }
-    if (req.method === "POST" && segments[0] === "keys" && segments[2] === "rotate") {
-      const id = uuid.parse(segments[1]);
+      // Capped key → own CVC key. Uncapped keys → one shared CVC per user.
       let upstreamProvisioned = false;
+      let upstreamPrefix: string | null = null;
+      let upstreamTokenLimit: number | null = null;
+      let upstreamKind: string | null = null;
       if (!isDemo) {
         const { cvcConfig } = await import("@/lib/cvc");
         if (cvcConfig().primaryKey) {
-          const { ensureUserUpstreamKey } = await import("@/lib/upstream-keys");
-          const provisioned = await ensureUserUpstreamKey(user);
+          const { ensureUpstreamForPlatformKey, syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+          const provisioned = await ensureUpstreamForPlatformKey(user, {
+            platformKeyId: created.id,
+            budget: input.budget ?? null,
+            reason: "create",
+          });
           upstreamProvisioned = true;
-          logger.info("upstream_key.ready_on_platform_key_rotate", { userId: user.id, created: provisioned.created, prefix: provisioned.prefix });
+          upstreamPrefix = provisioned.prefix;
+          upstreamTokenLimit = provisioned.tokenLimit;
+          upstreamKind = provisioned.kind;
+          logger.info("upstream_key.ready_on_platform_key_create", {
+            userId: user.id,
+            platformKeyId: created.id,
+            created: provisioned.created,
+            prefix: provisioned.prefix,
+            tokenLimit: provisioned.tokenLimit,
+            kind: provisioned.kind,
+            budget: input.budget ?? null,
+          });
+          if (input.budget == null) await syncUpstreamTokenLimitSafe(user, "key_budget");
+        } else {
+          logger.warn("upstream_key.skipped_no_primary", { userId: user.id, reason: "CVC_PRIMARY_API_KEY unset" });
         }
       }
+      return success({ ...created, secret, upstreamProvisioned, upstreamPrefix, upstreamTokenLimit, upstreamKind }, 201);
+    }
+    if (req.method === "POST" && segments[0] === "keys" && segments[2] === "rotate") {
+      const id = uuid.parse(segments[1]);
+      // Rotate PanaAI secret only; relink capped CVC row to the new key id (no new CVC mint).
       const secret = `pana-${randomBytes(30).toString("hex")}`;
       const hash = await verifier(secret);
       const result = await db.transaction(async tx => {
         const [old] = await tx.select().from(s.keys).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id))).for("update");
         if (!old || !old.enabled) throw new ApiError("key_revoked", "کلید لغو شده یا وجود ندارد.", 409);
-        const [key] = await tx.insert(s.keys).values({ userId: user.id, name: old.name, prefix: secret.slice(0, 16), verifier: hash, budget: old.budget, rateLimit: old.rateLimit, allowedModels: old.allowedModels, spent: old.spent }).returning({ id: s.keys.id, name: s.keys.name });
+        const [key] = await tx.insert(s.keys).values({ userId: user.id, name: old.name, prefix: secret.slice(0, 16), verifier: hash, budget: old.budget, rateLimit: old.rateLimit, allowedModels: old.allowedModels, spent: old.spent }).returning({ id: s.keys.id, name: s.keys.name, budget: s.keys.budget });
         await tx.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(eq(s.keys.id, old.id));
-        await tx.insert(s.audit).values({ userId: user.id, action: "key.rotated", targetId: key.id, details: { previousId: old.id, upstreamProvisioned } });
-        return key;
+        await tx.insert(s.audit).values({ userId: user.id, action: "key.rotated", targetId: key.id, details: { previousId: old.id, upstreamReminted: false } });
+        return { key, previousId: old.id, budget: old.budget };
       });
-      return success({ ...result, secret, upstreamProvisioned }, 201);
+      if (!isDemo && result.budget != null) {
+        const { relinkCappedUpstream } = await import("@/lib/upstream-keys");
+        await relinkCappedUpstream(result.previousId, result.key.id, user.id);
+      }
+      return success({ ...result.key, secret, upstreamProvisioned: false }, 201);
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "revoke") {
       const id = uuid.parse(segments[1]);
-      await db.transaction(async tx => {
-        const [key] = await tx.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id), eq(s.keys.enabled, true))).returning({ id: s.keys.id });
-        if (key) await tx.insert(s.audit).values({ userId: user.id, action: "key.revoked", targetId: id });
-      });
+      const [revoked] = await db.update(s.keys).set({ enabled: false, revokedAt: new Date() }).where(and(eq(s.keys.id, id), eq(s.keys.userId, user.id), eq(s.keys.enabled, true))).returning({ id: s.keys.id, budget: s.keys.budget });
+      if (revoked) await db.insert(s.audit).values({ userId: user.id, action: "key.revoked", targetId: id });
+      if (!isDemo && revoked) {
+        const { revokeCappedUpstream, syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+        if (revoked.budget != null) await revokeCappedUpstream(revoked.id, user.id);
+        await syncUpstreamTokenLimitSafe(user, "key_revoke");
+      }
       return success({ ok: true });
     }
     if (req.method === "POST" && segments[0] === "keys" && segments[2] === "update") {
@@ -339,6 +365,22 @@ export async function handler(req: NextRequest, context: Context) {
         if (input.budget !== undefined && input.budget !== null && input.budget < key.spent) {
           throw new ApiError("budget_below_spent", "سقف بودجه نمی‌تواند از مصرف فعلی کلید کمتر باشد.");
         }
+        if (input.budget !== undefined && input.budget !== null) {
+          const lots = await tx.select({ remaining: s.lots.remaining, reserved: s.lots.reserved }).from(s.lots)
+            .where(and(eq(s.lots.userId, user.id), gt(s.lots.expiresAt, new Date())));
+          const others = await tx.select({ budget: s.keys.budget, spent: s.keys.spent, enabled: s.keys.enabled, id: s.keys.id }).from(s.keys)
+            .where(and(eq(s.keys.userId, user.id), eq(s.keys.enabled, true)));
+          const available = lots.reduce((sum, lot) => sum + Math.max(0, lot.remaining - lot.reserved), 0);
+          const othersAllocated = sumKeyAllocations(others.filter(row => row.id !== key.id));
+          const freeForThis = unallocatedCredits(available, othersAllocated) + key.spent;
+          if (input.budget > freeForThis) {
+            throw new ApiError(
+              "allocation_exceeded",
+              `سقف بودجه نمی‌تواند از اعتبار قابل تخصیص به این کلید (${freeForThis.toLocaleString("fa-IR")}) بیشتر باشد.`,
+              409,
+            );
+          }
+        }
         const patch = {
           ...(input.budget !== undefined ? { budget: input.budget } : {}),
           ...(input.rateLimit !== undefined ? { rateLimit: input.rateLimit } : {}),
@@ -350,6 +392,22 @@ export async function handler(req: NextRequest, context: Context) {
         await tx.insert(s.audit).values({ userId: user.id, action: "key.updated", targetId: id, details: patch });
         return row;
       });
+      if (!isDemo && input.budget !== undefined) {
+        const {
+          ensureUpstreamForPlatformKey,
+          revokeCappedUpstream,
+          syncCappedKeyLimit,
+          syncUpstreamTokenLimitSafe,
+        } = await import("@/lib/upstream-keys");
+        if (updated.budget != null) {
+          const ensured = await ensureUpstreamForPlatformKey(user, { platformKeyId: updated.id, budget: updated.budget, reason: "budget_change" });
+          if (!ensured.created) await syncCappedKeyLimit(user, updated.id, updated.budget, "key_budget");
+        } else {
+          await revokeCappedUpstream(updated.id, user.id);
+          await ensureUpstreamForPlatformKey(user, { platformKeyId: updated.id, budget: null, reason: "budget_change" });
+        }
+        await syncUpstreamTokenLimitSafe(user, "key_budget");
+      }
       return success(updated);
     }
     if (req.method === "POST" && segments[0] === "admin" && segments[1] === "orders") {
@@ -391,6 +449,14 @@ export async function handler(req: NextRequest, context: Context) {
         await tx.insert(s.audit).values({ userId: user.id, action: `payment.${action}`, targetId: orderId, details: { actor: user.id, customerId, from: order.state, to: nextState, reason: input.note, reasonCode: input.reasonCode || null, customerMessage: input.customerMessage || null, amountIrr: order.amountIrr, bankReference: input.bankReference || null } });
         return updated;
       });
+      if (!isDemo && action === "approve" && result && "userId" in result) {
+        const customerId = (result as { userId: string }).userId;
+        const [customer] = await db.select().from(s.users).where(eq(s.users.id, customerId)).limit(1);
+        if (customer) {
+          const { syncUpstreamTokenLimitSafe } = await import("@/lib/upstream-keys");
+          await syncUpstreamTokenLimitSafe(customer, "wallet_topup");
+        }
+      }
       return success(result);
     }
     if (route === "auth/logout" && req.method === "POST") {

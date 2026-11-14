@@ -17,7 +17,7 @@ import {
 } from "@/lib/rules";
 import { MODEL_CATALOG } from "@/lib/shared";
 import { cvcLiveDispatchEnabled, proxyCvcJson } from "@/lib/cvc";
-import { ensureUserUpstreamKey } from "@/lib/upstream-keys";
+import { ensureUpstreamForPlatformKey } from "@/lib/upstream-keys";
 import { resolveModelCatalog } from "@/lib/models";
 import { randomUUID } from "node:crypto";
 import { logger } from "@/lib/logger";
@@ -112,7 +112,13 @@ export async function handle(req: NextRequest, context: { params: Promise<{ path
     // 4. Dispatch: sandbox simulator, or live upstream proxy when enabled.
     // Each customer wallet gets its own delegated upstream key — never one shared platform key.
     if (live) {
-      const upstreamCred = await ensureUserUpstreamKey(user);
+      // Capped PanaAI key → its own CVC key. Uncapped keys share one CVC key per user.
+      // Usage logs still record the PanaAI key name, so keys stay distinguishable.
+      const upstreamCred = await ensureUpstreamForPlatformKey(user, {
+        platformKeyId: key.id,
+        budget: key.budget,
+        reason: "first_use",
+      });
       const upstream = await proxyCvcJson(path as "chat/completions" | "responses", { ...body, stream: false }, { runtimeKey: upstreamCred.key });
       if (!upstream.ok) {
         await release(requestId);

@@ -19,7 +19,16 @@ assert.equal(boot.status, 200, boot.text);
 const customer = !boot.data.account.operator;
 
 // Public /v1 API: same contract for every account.
-const key = await api('keys', { name: 'boundary check', budget: 1000000, rateLimit: 60, allowedModels: [] });
+// Soft allocation: budget cannot exceed unallocated credits (seeded sandbox keys may already earmark some).
+const snapshot = await api('data');
+assert.equal(snapshot.status, 200, snapshot.text);
+const free = Number(snapshot.data.wallet?.unallocated ?? snapshot.data.wallet?.available ?? 0);
+const key = await api('keys', {
+  name: 'boundary check',
+  budget: free >= 1000000 ? 1000000 : null,
+  rateLimit: 60,
+  allowedModels: [],
+});
 assert.equal(key.status, 201, key.text);
 const auth = { authorization: `Bearer ${key.data.secret}`, 'content-type': 'application/json' };
 const models = await fetch(`${root}/v1/models`, { headers: auth }); const modelsText = await models.text();

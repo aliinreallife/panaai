@@ -143,7 +143,7 @@ export function permissionFor(route: string, method: string): Permission | null 
   if (method === "GET") return "admin.read";
   const rules: [RegExp, Permission][] = [
     [/^admin\/orders\/[^/]+\/(approve|reject|request-info)$/, "payments.review"],
-    [/^admin\/wallet\/(adjust|reconcile)$/, "finance.adjust"],
+    [/^admin\/wallet\/(adjust|reconcile|financial-audit)$/, "finance.adjust"],
     [/^admin\/refunds\/[^/]+\/(approve|reject|paid)$/, "refunds.decide"],
     [/^admin\/(pricing|packages)(\/[^/]+)?$/, "pricing.manage"],
     [/^admin\/models\/[^/]+$/, "pricing.manage"],
@@ -179,6 +179,8 @@ export const SYSTEM_DEFAULTS = {
   creditsPerCvcToken: 1,
   creditsPerUsd: 20_000_000,
   upstreamTokensPerUsd: 25_000_000,
+  /** Hard ceiling for every CVC delegated key mint. Never mint unlimited upstream keys. */
+  cvcDelegatedTokenCap: 5_000_000,
 };
 export const SYSTEM_LIMITS = {
   transferHours: [1, 72],
@@ -188,10 +190,11 @@ export const SYSTEM_LIMITS = {
   creditsPerCvcToken: [1, 1000],
   creditsPerUsd: [1_000_000, 100_000_000],
   upstreamTokensPerUsd: [1_000_000, 100_000_000],
+  cvcDelegatedTokenCap: [1_000, 100_000_000],
 } as const;
 export type SystemSettings = typeof SYSTEM_DEFAULTS;
 /** Fields customers may see in the app payload. Wholesale/upstream rates stay admin-only. */
-export type CustomerSystemSettings = Omit<SystemSettings, "upstreamTokensPerUsd" | "creditsPerCvcToken" | "creditsPerUsd">;
+export type CustomerSystemSettings = Omit<SystemSettings, "upstreamTokensPerUsd" | "creditsPerCvcToken" | "creditsPerUsd" | "cvcDelegatedTokenCap">;
 export function systemSettings(settings: Record<string, unknown>): SystemSettings {
   const read = (key: keyof SystemSettings) => {
     const value = Number(settings[`system:${key}`]);
@@ -206,7 +209,40 @@ export function systemSettings(settings: Record<string, unknown>): SystemSetting
     creditsPerCvcToken: read("creditsPerCvcToken"),
     creditsPerUsd: read("creditsPerUsd"),
     upstreamTokensPerUsd: read("upstreamTokensPerUsd"),
+    cvcDelegatedTokenCap: read("cvcDelegatedTokenCap"),
   };
+}
+
+/**
+ * Lifetime CVC `token_limit` for a delegated key.
+ * `creditPool` is the PanaAI key budget, or the wallet's unallocated credits when the key has no budget.
+ * Never returns unlimited — uncapped upstream keys are too risky.
+ */
+export function resolveCvcTokenLimit(creditPool: number | null | undefined, settings: SystemSettings): number {
+  const rate = Math.max(1, settings.creditsPerCvcToken);
+  const platformCap = Math.max(1, settings.cvcDelegatedTokenCap);
+  if (creditPool != null && Number.isFinite(creditPool)) {
+    if (creditPool <= 0) return 1;
+    return Math.max(1, Math.min(platformCap, Math.floor(creditPool / rate)));
+  }
+  return platformCap;
+}
+
+/** Remaining earmark for a limited key (0 if unlimited or revoked). */
+export function keyAllocationRemaining(key: { budget: number | null; spent: number; enabled?: boolean }): number {
+  if (key.enabled === false) return 0;
+  if (key.budget == null) return 0;
+  return Math.max(0, key.budget - key.spent);
+}
+
+/** Sum of remaining budgets across active limited keys. Unlimited keys allocate nothing. */
+export function sumKeyAllocations(keys: Array<{ budget: number | null; spent: number; enabled: boolean }>): number {
+  return keys.reduce((sum, key) => sum + keyAllocationRemaining(key), 0);
+}
+
+/** Credits still free for new key budgets or unlimited-key spend. */
+export function unallocatedCredits(available: number, allocated: number): number {
+  return Math.max(0, available - Math.max(0, allocated));
 }
 export function customerSystemSettings(settings: Record<string, unknown>): CustomerSystemSettings {
   const all = systemSettings(settings);

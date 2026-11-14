@@ -89,14 +89,26 @@ pass('admin elevation: demo OTP opens session; TOTP remains optional');
 // Payment review with Persian numeric matching
 await page.locator('.admin-tabs').getByRole('button', { name: 'بررسی پرداخت‌ها' }).click();
 await page.getByRole('button', { name: ref, exact: true }).click();
-await page.getByLabel('مرجع یکتای تراکنش تأییدشده بانک').fill(`UI-${Date.now()}`);
-const matched = page.getByRole('textbox', { name: 'مبلغ تطبیق‌داده‌شده با بانک' }); await matched.fill('1999999'); await page.getByText(/منطبق نیست؛ تأیید ممکن نیست/).waitFor();
-await matched.fill('۲۰۰۰۰۰۰'); assert.equal(await matched.inputValue(), '۲٬۰۰۰٬۰۰۰'); await page.getByText('با مبلغ سفارش منطبق است.').waitFor();
-await page.getByLabel('دلیل و توضیح بررسی').fill('بررسی مستقل بانک در این آزمون مرورگری شبیه‌سازی شد.');
-await page.getByRole('checkbox', { name: 'تطبیق مستقل دریافت وجه و حساب مقصد را برای این آزمایش شبیه‌سازی می‌کنم.' }).check();
+const reviewDialog = page.getByRole('dialog');
+await reviewDialog.waitFor();
+await reviewDialog.getByLabel('مرجع یکتای تراکنش تأییدشده بانک').fill(`UI-${Date.now()}`);
+const matched = reviewDialog.getByRole('textbox', { name: 'مبلغ تطبیق‌داده‌شده با بانک' });
+await matched.waitFor();
+await matched.click();
+await matched.fill('');
+await matched.pressSequentially('1999999', { delay: 20 });
+assert.equal(await matched.inputValue(), '۱٬۹۹۹٬۹۹۹');
+await reviewDialog.getByText(/منطبق نیست؛ تأیید ممکن نیست/).waitFor({ timeout: 10000 });
+await matched.fill('');
+await matched.pressSequentially('2000000', { delay: 20 });
+assert.equal(await matched.inputValue(), '۲٬۰۰۰٬۰۰۰');
+await reviewDialog.getByText('با مبلغ سفارش منطبق است.').waitFor();
+await reviewDialog.getByLabel('دلیل و توضیح بررسی').fill('بررسی مستقل بانک در این آزمون مرورگری شبیه‌سازی شد.');
+await reviewDialog.getByRole('checkbox', { name: 'تطبیق مستقل دریافت وجه و حساب مقصد را برای این آزمایش شبیه‌سازی می‌کنم.' }).check();
 await shot('07-payment-review');
-await page.getByRole('button', { name: 'تأیید و شارژ', exact: true }).click(); await page.getByRole('button', { name: 'تأیید نهایی آزمایشی' }).click();
-await page.getByRole('dialog').waitFor({ state: 'hidden' });
+await reviewDialog.getByRole('button', { name: 'تأیید و شارژ', exact: true }).click();
+await reviewDialog.getByRole('button', { name: 'تأیید نهایی آزمایشی' }).click();
+await reviewDialog.waitFor({ state: 'hidden' });
 pass('payment review: grouped-digit amount matching and exactly-once grant');
 
 // Provider state machine via simulator

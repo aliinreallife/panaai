@@ -9,7 +9,7 @@ import path from "node:path";
 import { MODEL_CATALOG } from "@/lib/shared";
 import { getUsageReport } from "@/lib/analytics";
 import { tehranDay } from "@/lib/report-utils";
-import { customerSystemSettings, isOperator, systemSettings } from "@/lib/rules";
+import { customerSystemSettings, isOperator, sumKeyAllocations, systemSettings, unallocatedCredits } from "@/lib/rules";
 
 /** Default FX: 275,000 تومان/USD (= 2,750,000 ریال). Override via admin → pricing (platform-wide). */
 export const PRICING = { rateIrr: 2_750_000, minToman: 50_000, maxToman: 5_000_000, version: "fx-275k-v1", validityDays: 365 };
@@ -131,7 +131,8 @@ async function seedDemoWorkspace(tx: Tx, userId: string) {
   }
   const sampleNames = ["پروژه اصلی", "محیط توسعه", "دستیار شخصی"];
   for (let i = 0; i < 3; i++) {
-    await tx.insert(s.keys).values({ userId, name: sampleNames[i], prefix: `pana-${randomBytes(5).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 5000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
+    // Soft allocation: keep seed budgets within remaining wallet so unallocated stays usable in demos/tests.
+    await tx.insert(s.keys).values({ userId, name: sampleNames[i], prefix: `pana-${randomBytes(5).toString("hex")}`, verifier: sha(randomBytes(32)), spent: [5100000, 1800000, 620000][i], budget: i === 2 ? 2000000 : null, rateLimit: i === 1 ? 30 : 60, createdAt: future(-28 + i * 4), lastUsedAt: new Date(now.getTime() - i * 3600000) });
   }
   const weights = [12, 16, 14, 17, 13, 28, 32, 30, 34, 29, 19, 20, 18, 24, 21, 30, 34, 36, 33, 39, 38, 41, 44, 40, 46, 29, 32, 28, 35, 31];
   const total = weights.reduce((a, b) => a + b, 0);
@@ -233,7 +234,20 @@ export async function dataFor(user: typeof s.users.$inferSelect) {
       })()
     : undefined;
   return { user: { id: user.id, name: user.name, demo: user.demo, phone: user.phone ?? null, createdAt: user.createdAt, settings: user.settings }, analytics, keys: keyRows, orders: orderRows, lots: lotRows, events: eventRows, daily: analytics.daily, usage: usageRows, audit: auditRows.filter(a => isOperator(user.role) || CUSTOMER_AUDIT.test(a.action)).map(a => ({ ...a, details: a.action.startsWith("payment.") ? { from: a.details.from, to: a.details.to, reasonCode: a.details.reasonCode, customerMessage: a.details.customerMessage } : {} })), tickets: ticketRows,
-    wallet: { available: eligible.reduce((a,l) => a+l.remaining-l.reserved,0), reserved: eligible.reduce((a,l) => a+l.reserved,0), expiring7: eligible.filter(l => l.expiresAt < future(7)).reduce((a,l) => a+l.remaining,0), expiring: eligible.filter(l => l.expiresAt < future(30)).reduce((a,l) => a+l.remaining,0), nearestExpiry: eligible[0]?.expiresAt ?? null },
+    wallet: (() => {
+      const available = eligible.reduce((a, l) => a + l.remaining - l.reserved, 0);
+      const reserved = eligible.reduce((a, l) => a + l.reserved, 0);
+      const allocated = sumKeyAllocations(keyRows);
+      return {
+        available,
+        reserved,
+        allocated,
+        unallocated: unallocatedCredits(available, allocated),
+        expiring7: eligible.filter(l => l.expiresAt < future(7)).reduce((a, l) => a + l.remaining, 0),
+        expiring: eligible.filter(l => l.expiresAt < future(30)).reduce((a, l) => a + l.remaining, 0),
+        nearestExpiry: eligible[0]?.expiresAt ?? null,
+      };
+    })(),
     // Customer payload: service state only. Balance, source and supplier details stay in admin routes.
     service: { state: provider.state, admits: provider.admits, checkedAt: provider.checkedAt },
     account: { state: user.state, role: isOperator(user.role) ? user.role : "customer", operator: isOperator(user.role) },

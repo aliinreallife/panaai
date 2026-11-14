@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
-    "test:rules": "node scripts/rules-check.mjs && node scripts/cvc-client-check.mjs",
+    "test:rules": "node scripts/rules-check.mjs && node scripts/cvc-client-check.mjs && node scripts/financial-audit-check.mjs",
     "test:api": "node scripts/smoke.mjs && node scripts/logic-check.mjs && node scripts/ops-check.mjs && node scripts/privacy-boundary.mjs && node scripts/review-rules.mjs",
     "test:browser": "node scripts/browser-check.mjs && node scripts/pana-ui-check.mjs && node scripts/accessibility.mjs",
     "test:boundary": "node scripts/customer-boundary.mjs"
