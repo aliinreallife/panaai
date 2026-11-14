@@ -6,11 +6,11 @@ const units = (name: string) => bigint(name, { mode: "number" }).notNull();
 
 export const users = pgTable("platform_users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull().default("آرین محمدی"),
+  name: text("name").notNull().default("کاربر"),
   phone: text("phone"),
-  demo: boolean("demo").notNull().default(true),
+  demo: boolean("demo").notNull().default(false),
   state: text("state").notNull().default("active"),
-  role: text("role").notNull().default("owner"),
+  role: text("role").notNull().default("customer"),
   settings: jsonb("settings").$type<Record<string, boolean | string>>().notNull().default({ lowBalance: true, expiry: true, payments: true, email: "" }),
   createdAt: date("created_at"),
 });
