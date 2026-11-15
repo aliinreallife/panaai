@@ -226,12 +226,16 @@ async function readSharedMeta(userId: string) {
     eq(s.upstreamCredentials.kind, "shared_uncapped"),
     isNull(s.upstreamCredentials.revokedAt),
   )).limit(1);
-  if (!sharedRow) return { prefix: null as string | null, tokenLimit: null as number | null, tokensUsed: 0 };
+  if (!sharedRow) {
+    return { prefix: null as string | null, tokenLimit: null as number | null, tokensUsed: 0, previousPrefix: null as string | null };
+  }
   const meta = (sharedRow.meta || {}) as Record<string, unknown>;
+  const previousPrefix = typeof meta.previousPrefix === "string" ? meta.previousPrefix : null;
   return {
     prefix: sharedRow.prefix,
     tokenLimit: metaNum(meta, "tokenLimit", "token_limit"),
     tokensUsed: metaNum(meta, "tokensUsed", "tokens_used") ?? 0,
+    previousPrefix,
   };
 }
 
@@ -357,8 +361,20 @@ export async function runCvcFinanceDrill(user: User): Promise<CvcFinanceDrillRep
   const finalUnallocated = afterSpendAvailable - finalAllocated;
   const desiredShared = desiredSharedTokenLimit(pool.unallocated, 0, settings);
 
-  let sharedMeta = { prefix: cvcB?.prefix ?? null as string | null, tokenLimit: null as number | null, tokensUsed: 0 };
-  let sharedSync: { synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null } = {
+  let sharedMeta = {
+    prefix: cvcB?.prefix ?? null as string | null,
+    tokenLimit: null as number | null,
+    tokensUsed: 0,
+    previousPrefix: null as string | null,
+  };
+  let sharedSync: {
+    synced: boolean;
+    tokenLimit: number | null;
+    previousLimit: number | null;
+    healed?: boolean;
+    code?: string | null;
+    previousPrefix?: string | null;
+  } = {
     synced: false,
     tokenLimit: null,
     previousLimit: null,
@@ -368,9 +384,13 @@ export async function runCvcFinanceDrill(user: User): Promise<CvcFinanceDrillRep
       allowGrow: remoteRevokeFreesUpstreamPool(remoteA.remote) && remoteRevokeFreesUpstreamPool(remoteC.remote),
     });
     sharedMeta = await readSharedMeta(user.id);
+    const orphanHint = sharedMeta.previousPrefix && sharedMeta.previousPrefix !== sharedMeta.prefix
+      ? ` KEEP ${sharedMeta.prefix}; DELETE orphan ${sharedMeta.previousPrefix} on CVC if still listed.`
+      : "";
     steps.push(
       `Shared CVC sync: synced=${sharedSync.synced}, healed=${sharedSync.healed === true}, `
-      + `tokenLimit=${sharedMeta.tokenLimit ?? "—"}, code=${sharedSync.code ?? "ok"}, prefix=${sharedMeta.prefix ?? "—"}.`,
+      + `tokenLimit=${sharedMeta.tokenLimit ?? "—"}, code=${sharedSync.code ?? "ok"}, prefix=${sharedMeta.prefix ?? "—"}, `
+      + `previousPrefix=${sharedMeta.previousPrefix ?? "—"}.${orphanHint}`,
     );
     if (sharedMeta.prefix && cvcB) cvcB = { ...cvcB, prefix: sharedMeta.prefix, tokenLimit: sharedMeta.tokenLimit };
   }
@@ -533,6 +553,26 @@ export async function runCvcFinanceDrill(user: User): Promise<CvcFinanceDrillRep
         ? `On CVC, open shared key ${sharedMeta.prefix ?? cvcB?.prefix} — limit should reflect ~${pool.unallocated.toLocaleString("en-US")} free credits. Legacy unlimited shared keys are reminted on sync.`
         : "Provision shared CVC on first uncapped use when primary is configured.",
       cvcPrefix: cvcB?.prefix ?? sharedMeta.prefix,
+      panaPrefix: tokenB.prefix,
+    }),
+    check({
+      id: "shared-orphan-cleanup",
+      token: "shared",
+      title: "Only one shared CVC key should remain",
+      expect: cvcConfigured && !isDemo
+        ? sharedMeta.previousPrefix && sharedMeta.previousPrefix !== sharedMeta.prefix
+          ? `KEEP ${sharedMeta.prefix}; manually DELETE orphan ${sharedMeta.previousPrefix} if CVC still lists it (remint leftover)`
+          : `Only active shared ${sharedMeta.prefix ?? "—"} (no remint orphan recorded)`
+        : "skipped without live CVC",
+      actual: cvcConfigured && !isDemo
+        ? `active=${sharedMeta.prefix ?? "—"}, previousPrefix=${sharedMeta.previousPrefix ?? "none"}, healedThisRun=${sharedSync.healed === true}`
+        : "CVC not exercised",
+      // Informational: we cannot list CVC panel from here; pass when we know which orphan to delete (or none).
+      pass: true,
+      hint: sharedMeta.previousPrefix && sharedMeta.previousPrefix !== sharedMeta.prefix
+        ? `CVC panel: delete ${sharedMeta.previousPrefix}. Keep ${sharedMeta.prefix} (limit ≈ ${pool.unallocated.toLocaleString("en-US")}).`
+        : "If you see two pana-shared keys, keep the one matching Token B’s CVC prefix and delete the other.",
+      cvcPrefix: sharedMeta.prefix,
       panaPrefix: tokenB.prefix,
     }),
     check({

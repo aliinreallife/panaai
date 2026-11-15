@@ -396,10 +396,20 @@ export async function revokeCappedUpstream(platformKeyId: string, userId: string
   return { row: row ?? null, remote };
 }
 
+/** True when CVC edit reported a successful delete (HTTP 2xx; status deleted/ok/omitted). */
+function cvcDeleteSucceeded(result: Awaited<ReturnType<typeof editDelegatedKey>>): boolean {
+  if (!result.ok) return false;
+  const status = result.data.status;
+  return status == null || status === "deleted" || status === "ok";
+}
+
 /**
  * Replace a shared uncapped CVC key with a freshly minted limited one.
  * Used when local meta has no tokenLimit (legacy / unlimited remote) or when
  * CVC rejects absolute `token_limit` edits (`unlimited_token_limit`).
+ *
+ * Never leaves two active shared keys: if the old remote cannot be deleted,
+ * the new mint is deleted and remint aborts (freeze-only is not enough).
  */
 async function remintSharedUncapped(
   user: User,
@@ -407,14 +417,17 @@ async function remintSharedUncapped(
   tokenLimit: number,
   reason: string,
   pool: { unallocated: number; allocated: number },
-): Promise<{ ok: true; tokenLimit: number; prefix: string } | { ok: false; code: string | null }> {
+): Promise<{ ok: true; tokenLimit: number; prefix: string; previousPrefix: string } | { ok: false; code: string | null; previousPrefix?: string }> {
   const limit = Math.max(1, Math.floor(tokenLimit));
+  const previousPrefix = row.prefix;
   let oldKey: string | null = null;
   try {
     oldKey = await decryptSecret(row.encryptedSecret);
   } catch {
-    logger.error("upstream_key.decrypt_failed", { userId: user.id, prefix: row.prefix, reason: "remint_shared" });
+    logger.error("upstream_key.decrypt_failed", { userId: user.id, prefix: previousPrefix, reason: "remint_shared" });
+    return { ok: false, code: "decrypt_failed", previousPrefix };
   }
+  if (!oldKey) return { ok: false, code: "decrypt_failed", previousPrefix };
 
   let minted: Awaited<ReturnType<typeof callCvcMint>>["minted"];
   try {
@@ -424,22 +437,27 @@ async function remintSharedUncapped(
       reason: `remint:${reason}`,
     }));
   } catch {
-    return { ok: false, code: "mint_failed" };
+    return { ok: false, code: "mint_failed", previousPrefix };
   }
 
-  if (oldKey) {
-    const deleted = await editDelegatedKey({ key: oldKey, delete: true });
-    if (!deleted.ok) {
-      const frozen = await editDelegatedKey({ key: oldKey, active: false });
-      logger.warn("upstream_key.remint_old_cleanup", {
-        userId: user.id,
-        oldPrefix: row.prefix,
-        deleted: false,
-        frozen: frozen.ok,
-        deleteCode: deleted.code,
-        freezeCode: frozen.ok ? null : frozen.code,
-      });
-    }
+  const deleted = await editDelegatedKey({ key: oldKey, delete: true });
+  const oldGone = cvcDeleteSucceeded(deleted);
+  if (!oldGone) {
+    // Do not keep a second active shared key — roll back the new mint.
+    const rolled = await editDelegatedKey({ key: minted.data.key, delete: true });
+    if (!rolled.ok) await editDelegatedKey({ key: minted.data.key, active: false });
+    // Best-effort freeze old so it cannot spend while operator deletes it on CVC.
+    const frozen = await editDelegatedKey({ key: oldKey, active: false });
+    logger.error("upstream_key.remint_old_cleanup", {
+      userId: user.id,
+      oldPrefix: previousPrefix,
+      deleted: false,
+      frozen: frozen.ok,
+      deleteCode: deleted.ok ? deleted.data.status ?? null : deleted.code,
+      freezeCode: frozen.ok ? null : frozen.code,
+      newRolledBack: rolled.ok,
+    });
+    return { ok: false, code: deleted.ok ? "old_delete_unconfirmed" : (deleted.code ?? "old_delete_failed"), previousPrefix };
   }
 
   const encryptedSecret = await encryptSecret(minted.data.key);
@@ -461,7 +479,7 @@ async function remintSharedUncapped(
       source: minted.source,
       remintedAt: new Date().toISOString(),
       remintReason: reason,
-      previousPrefix: row.prefix,
+      previousPrefix,
       tokenLimit: nextLimit,
       tokensUsed,
       syncedAt: new Date().toISOString(),
@@ -479,23 +497,25 @@ async function remintSharedUncapped(
     details: {
       reason,
       kind: "shared_uncapped",
-      previousPrefix: row.prefix,
+      previousPrefix,
       prefix,
       tokenLimit: nextLimit,
       unallocated: pool.unallocated,
       allocated: pool.allocated,
+      oldDeleted: true,
     },
   });
   logger.info("upstream_key.reminted", {
     userId: user.id,
     reason,
     kind: "shared_uncapped",
-    previousPrefix: row.prefix,
+    previousPrefix,
     prefix,
     tokenLimit: nextLimit,
     unallocated: pool.unallocated,
+    oldDeleted: true,
   });
-  return { ok: true, tokenLimit: nextLimit, prefix };
+  return { ok: true, tokenLimit: nextLimit, prefix, previousPrefix };
 }
 
 /**
@@ -509,7 +529,7 @@ export async function syncSharedUncappedLimit(
   user: User,
   reason: "wallet_topup" | "key_revoke" | "key_budget" | "manual" = "manual",
   opts: { allowGrow?: boolean } = {},
-): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null }> {
+): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null; previousPrefix?: string | null }> {
   const cfg = cvcConfig();
   if (!cfg.primaryKey) return { synced: false, tokenLimit: null, previousLimit: null };
 
@@ -553,9 +573,9 @@ export async function syncSharedUncappedLimit(
         unallocated: pool.unallocated,
         heal: "remint",
       });
-      return { synced: false, tokenLimit: null, previousLimit: null, healed: false, code: reminted.code };
+      return { synced: false, tokenLimit: null, previousLimit: null, healed: false, code: reminted.code, previousPrefix: reminted.previousPrefix ?? row.prefix };
     }
-    return { synced: true, tokenLimit: reminted.tokenLimit, previousLimit: null, healed: true };
+    return { synced: true, tokenLimit: reminted.tokenLimit, previousLimit: null, healed: true, previousPrefix: reminted.previousPrefix };
   }
 
   let plaintext: string;
@@ -576,7 +596,7 @@ export async function syncSharedUncappedLimit(
     if (edited.code === "unlimited_token_limit" || !growing) {
       const reminted = await remintSharedUncapped(user, row, desiredLimit, reason, pool);
       if (reminted.ok) {
-        return { synced: true, tokenLimit: reminted.tokenLimit, previousLimit: storedLimit, healed: true, code: edited.code };
+        return { synced: true, tokenLimit: reminted.tokenLimit, previousLimit: storedLimit, healed: true, code: edited.code, previousPrefix: reminted.previousPrefix };
       }
       logger.error("upstream_key.sync_failed", {
         userId: user.id,
@@ -588,7 +608,7 @@ export async function syncSharedUncappedLimit(
         unallocated: pool.unallocated,
         heal: "remint_failed",
       });
-      return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit, healed: false, code: reminted.code ?? edited.code };
+      return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit, healed: false, code: reminted.code ?? edited.code, previousPrefix: reminted.previousPrefix ?? row.prefix };
     }
     logger.error("upstream_key.sync_failed", {
       userId: user.id,
@@ -688,7 +708,7 @@ export async function syncUpstreamTokenLimitSafe(
   user: User,
   reason: Parameters<typeof syncSharedUncappedLimit>[1],
   opts?: Parameters<typeof syncSharedUncappedLimit>[2],
-): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null }> {
+): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null; previousPrefix?: string | null }> {
   try {
     return await syncSharedUncappedLimit(user, reason, opts);
   } catch (error) {
