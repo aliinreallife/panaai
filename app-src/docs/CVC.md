@@ -48,8 +48,30 @@ Wallet available **20M**. Create capped budget **5M** → unallocated **15M** (s
 
 Admin → مالی → **آزمون کلی CVC**: creates A (capped 5M), B (uncapped), C (capped 2M), mints CVC keys, runs a tiny live `"hi"` on A (real `cost_tokens`, not a fake 1M debit), removes C, revokes A, then shows a checklist with real `pana-…` / CVC prefixes. After the run only shared B should remain on CVC (A/C are deleted by design). Automated asserts: `scripts/cvc-finance-check.mjs`.
 
+### Drill expectations (verified live)
+
+| Check | Expect |
+|---|---|
+| Spend | Tiny real `"hi"` credits (e.g. ~39), **never** a fake 1M debit |
+| A / C on CVC | Minted mid-run, then **deleted** — do not expect them after the checklist finishes |
+| B on CVC | Shared uncapped key stays; may be `new=false` if reused |
+| Shared `tokenLimit` | Numeric, ≥ final unallocated. Blank `—` meant sync failed |
+| Pass bar | 10/10 (includes orphan-hint row after remint) |
+
+### Live findings (keep these true)
+
+1. **`unlimited_token_limit`** — CVC rejects absolute `token_limit` edits on legacy unlimited shared keys. Fix path: **remint** a capped shared key (`syncSharedUncappedLimit` → `remintSharedUncapped`). Grow afterward uses `additional_tokens` only.
+2. **Two shared keys on the CVC panel** — remint creates a new prefix and records `meta.previousPrefix`. If the panel still lists the old key, **keep the active shared** (Token B / current prefix, limit ≈ unallocated) and **manually delete** `previousPrefix`. Remint now aborts + rolls back the new mint if the old key cannot be deleted.
+3. **Soft-allocation identity** — capped spend does not shrink unallocated; revoking capped keys after remote delete raises unallocated and the shared limit.
+4. **Production** — `PLATFORM_MODE=live` on `panaai-psi.vercel.app`; schema defaults are non-demo (`name=کاربر`, `demo=false`, `role=customer`).
+
+## Panacode connect (PanaAI half)
+
+Merged on master: `/connect/panacode` + `POST /api/v1/connect/panacode/*` (session → attach → complete → loopback `code` → `exchange` for `pana-…` secret). Desktop companion is the Panacode fork of OpenCode (`arashmakkyy/panacode`); it must use **separate** config/data dirs from upstream OpenCode (e.g. `~/.panacode`, not `~/.opencode`).
+
 ## Still required for a full commercial launch
 
 1. Confirm live balance/meter on the reseller account and keep admin rates (`creditsPerUsd` / `upstreamTokensPerUsd`) aligned with invoices.
 2. Real SMS login, bank destination, and staff accounts (see `docs/PRODUCTION.md`).
 3. Optional: streaming proxy, deeper crash reconciliation against `GET /v1/keys/logs`, and operator retry queue when a remote CVC edit fails.
+4. Ship installable **Panacode** builds (CLI/desktop) with path isolation from OpenCode + Sign in with PanaAI against production.
