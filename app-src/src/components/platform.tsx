@@ -179,7 +179,7 @@ function StatusModal({ onClose }: { onClose: () => void }) {
     <div className="modal-actions"><Button onClick={onClose}>متوجه شدم</Button></div>
   </Modal>;
 }
-function LoginForm({ flow = "attach", onSuccess }: { flow?: "login" | "attach"; onSuccess: (data?: AppData) => void | Promise<void> }) {
+export function LoginForm({ flow = "attach", onSuccess }: { flow?: "login" | "attach"; onSuccess: (data?: AppData) => void | Promise<void> }) {
   const [phone, setPhone] = useState(""); const [code, setCode] = useState(""); const [challenge, setChallenge] = useState<{ challengeId: string; demo?: boolean; demoCode?: string; message?: string } | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [remaining, setRemaining] = useState(0);
   useEffect(() => { if (remaining <= 0) return; const timer = setTimeout(() => setRemaining(remaining - 1), 1000); return () => clearTimeout(timer); }, [remaining]);
   const requestPath = flow === "login" ? "auth/login/otp/request" : "auth/otp/request";
@@ -215,7 +215,7 @@ function LoginForm({ flow = "attach", onSuccess }: { flow?: "login" | "attach"; 
     </form>
   </>;
 }
-function AuthGate({ onSuccess }: { onSuccess: (data: AppData) => void | Promise<void> }) {
+export function AuthGate({ onSuccess }: { onSuccess: (data: AppData) => void | Promise<void> }) {
   return <section className="panel auth-gate">
     <div className="auth-gate-brand"><PanaBrand /></div>
     <h1>ورود به PanaAI</h1>

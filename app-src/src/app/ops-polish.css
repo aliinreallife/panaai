@@ -107,4 +107,23 @@ html[data-theme] .field-invalid input{border-color:var(--danger)!important;box-s
 .role-list p{font-size:var(--fs-xs);color:var(--muted);margin:2px 0 0}
 .refund-section{display:flex;flex-direction:column;gap:10px;margin:14px 0}
 .mono{font-family:var(--font-code)}
-@media(max-width:700px){.channel-grid{grid-template-columns:1fr}.admin-gate{flex-wrap:wrap}.admin-gate>.btn{width:100%}.wallet-notice{flex-wrap:wrap;align-items:flex-start;padding:13px 14px}.wallet-notice-actions{width:100%;margin-inline-start:0;margin-top:4px}.wallet-notice-cta{flex:1;justify-content:center}.auth-gate{margin:24px 0;padding:22px 18px}.state-node{min-width:calc(50% - 5px)}.state-node::after{display:none}}
+/* Panacode 1-click connect */
+.connect-panacode{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:40px 18px 64px;background:
+  radial-gradient(1200px 500px at 80% -10%, color-mix(in srgb, var(--green) 18%, transparent), transparent 60%),
+  radial-gradient(900px 420px at 0% 100%, color-mix(in srgb, var(--warm) 14%, transparent), transparent 55%),
+  var(--canvas)}
+.connect-panacode-card{width:min(560px,100%);display:flex;flex-direction:column;gap:16px}
+.connect-panacode-brand{display:flex;justify-content:center;margin-bottom:4px}
+.connect-panacode h1{font-size:var(--fs-2xl);text-align:center}
+.connect-panacode>p,.connect-panacode-card>p{text-align:center;color:var(--secondary);font-size:var(--fs-sm);line-height:1.9}
+.connect-wallet-strip{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.connect-wallet-strip>div{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.connect-wallet-strip span{display:block;font-size:var(--fs-2xs);color:var(--muted);margin-bottom:4px}
+.connect-wallet-strip strong{font-size:var(--fs-xl)}
+.connect-options h2{margin-bottom:6px}
+.connect-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 18px}
+.connect-mode-grid>button{text-align:start;border:1px solid var(--border);background:var(--input, var(--card));border-radius:12px;padding:14px 14px;display:flex;flex-direction:column;gap:6px}
+.connect-mode-grid>button strong{font-size:var(--fs-sm)}
+.connect-mode-grid>button span{font-size:var(--fs-2xs);color:var(--muted);line-height:1.8}
+.connect-mode-grid>button.selected{border-color:var(--green);background:var(--green-soft);box-shadow:0 0 0 1px color-mix(in srgb, var(--green) 35%, transparent)}
+@media(max-width:700px){.channel-grid{grid-template-columns:1fr}.admin-gate{flex-wrap:wrap}.admin-gate>.btn{width:100%}.wallet-notice{flex-wrap:wrap;align-items:flex-start;padding:13px 14px}.wallet-notice-actions{width:100%;margin-inline-start:0;margin-top:4px}.wallet-notice-cta{flex:1;justify-content:center}.auth-gate{margin:24px 0;padding:22px 18px}.state-node{min-width:calc(50% - 5px)}.state-node::after{display:none}.connect-mode-grid,.connect-wallet-strip{grid-template-columns:1fr}.connect-panacode{padding-top:24px}}
