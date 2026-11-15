@@ -1,0 +1,319 @@
+From 3ce6e4853268af4aab3becaafee652c6fbe46067 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sun, 15 Nov 2026 08:06:48 +0000
+Subject: [PATCH] feat(panacode): isolate data dirs from OpenCode + local
+ installer
+
+Use XDG app name panacode (never opencode), PANACODE_* env overrides,
+panacode.log, ~/.panacode/bin installer, and a panacode CLI bin entry so
+installs do not overwrite OpenCode config or history.
+---
+ .gitignore                                 |   1 +
+ PANACODE.md                                |  21 ++++
+ bun.lock                                   |   1 +
+ install-panacode                           | 127 +++++++++++++++++++++
+ packages/cli/bin/panacode.cjs              |   5 +
+ packages/cli/package.json                  |   3 +-
+ packages/core/src/panacode/product.ts      |   9 ++
+ packages/util/src/global.ts                |  11 +-
+ packages/util/src/observability/logging.ts |   8 +-
+ 9 files changed, 178 insertions(+), 8 deletions(-)
+ create mode 100755 install-panacode
+ create mode 100644 packages/cli/bin/panacode.cjs
+
+diff --git a/.gitignore b/.gitignore
+index 25a1b47..032aef1 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -38,3 +38,4 @@ tsconfig.tsbuildinfo
+ 
+ # Legal drafts pending review are kept outside the repository; never copy them in.
+ legal-drafts-private/
++release/
+diff --git a/PANACODE.md b/PANACODE.md
+index ac177b0..e54d877 100644
+--- a/PANACODE.md
++++ b/PANACODE.md
+@@ -1,5 +1,26 @@
+ # Panacode overlay
+ 
++## Install (isolated from OpenCode)
++
++Panacode must **never** write OpenCode’s dirs (`~/.opencode`, XDG `…/opencode`).
++
++```bash
++# From this repo (needs Bun: https://bun.sh)
++./install-panacode --from-source
++# then open a new shell
++panacode --help
++```
++
++| Thing | OpenCode | Panacode |
++| --- | --- | --- |
++| Install bin | `~/.opencode/bin/opencode` | `~/.panacode/bin/panacode` |
++| XDG app name | `opencode` | `panacode` |
++| Config override | `OPENCODE_CONFIG_DIR` | `PANACODE_CONFIG_DIR` (falls back to OpenCode env) |
++| Logs | `opencode.log` | `panacode.log` |
++
++Auth/API defaults to PanaAI at `https://panaai-psi.vercel.app` (see `Product` in `packages/core/src/panacode/product.ts`).
++
++
+ Panacode is a product fork of [OpenCode](https://github.com/anomalyco/opencode) (`dev`). The goal is a thin, reversible overlay: branding + a PanaAI-only connect catalog, without rewriting agent/tool mechanics.
+ 
+ ## Product defaults
+diff --git a/bun.lock b/bun.lock
+index 2aac83b..141334d 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -110,6 +110,7 @@
+       "bin": {
+         "opencode": "./bin/opencode.cjs",
+         "opencode2": "./bin/opencode2.cjs",
++        "panacode": "./bin/panacode.cjs",
+       },
+       "dependencies": {
+         "@agentclientprotocol/sdk": "1.6.0",
+diff --git a/install-panacode b/install-panacode
+new file mode 100755
+index 0000000..d04e799
+--- /dev/null
++++ b/install-panacode
+@@ -0,0 +1,127 @@
++#!/usr/bin/env bash
++# Panacode installer — installs into ~/.panacode/bin (never ~/.opencode).
++# Modes:
++#   --from-source   build this checkout with Bun and install the binary
++#   --binary PATH   install an already-built panacode/opencode binary as `panacode`
++#   (default)       same as --from-source when run from a git checkout
++set -euo pipefail
++
++APP=panacode
++MUTED=$'\033[0;2m'
++RED=$'\033[0;31m'
++NC=$'\033[0m'
++
++usage() {
++  cat <<EOF
++Panacode Installer (isolated from OpenCode)
++
++Installs the CLI as \`$APP\` into \$HOME/.panacode/bin.
++Config/data use XDG dirs under the app name \`panacode\` (not \`opencode\`).
++
++Usage: ./install-panacode [options]
++
++Options:
++  -h, --help            Show help
++  --from-source         Build from this repository (requires Bun)
++  -b, --binary <path>   Install a local binary as panacode
++  --no-modify-path      Do not append PATH export to shell rc files
++
++Examples:
++  ./install-panacode --from-source
++  ./install-panacode --binary ./packages/cli/dist/.../bin/opencode
++EOF
++}
++
++from_source=false
++no_modify_path=false
++binary_path=""
++root="$(cd "$(dirname "$0")" && pwd)"
++
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    -h|--help) usage; exit 0 ;;
++    --from-source) from_source=true; shift ;;
++    --no-modify-path) no_modify_path=true; shift ;;
++    -b|--binary)
++      [[ -n "${2:-}" ]] || { echo -e "${RED}--binary requires a path${NC}"; exit 1; }
++      binary_path="$2"; shift 2 ;;
++    *) echo -e "${RED}Unknown option: $1${NC}"; usage; exit 1 ;;
++  esac
++done
++
++INSTALL_DIR="${PANACODE_INSTALL_DIR:-$HOME/.panacode/bin}"
++mkdir -p "$INSTALL_DIR"
++
++if [[ -z "$binary_path" ]]; then
++  from_source=true
++fi
++
++if [[ "$from_source" == true && -z "$binary_path" ]]; then
++  if ! command -v bun >/dev/null 2>&1; then
++    echo -e "${RED}Bun is required to build from source.${NC}"
++    echo "Install: curl -fsSL https://bun.sh/install | bash"
++    exit 1
++  fi
++  echo -e "${MUTED}Installing workspace deps…${NC}"
++  (cd "$root" && bun install)
++  echo -e "${MUTED}Building CLI…${NC}"
++  (cd "$root/packages/cli" && bun run build)
++  # Prefer a built binary named opencode or panacode under dist/
++  candidate="$(find "$root/packages/cli/dist" -type f \( -name panacode -o -name opencode \) 2>/dev/null | head -n 1 || true)"
++  if [[ -z "$candidate" ]]; then
++    # Fallback: runnable wrapper via bun
++    wrapper="$INSTALL_DIR/$APP"
++    cat > "$wrapper" <<WRAP
++#!/usr/bin/env bash
++set -euo pipefail
++export PANACODE_APP_DIR="\${PANACODE_APP_DIR:-panacode}"
++export OPENCODE_APP_DIR="\$PANACODE_APP_DIR"
++ROOT="$root"
++exec bun run --cwd "\$ROOT/packages/cli" src/index.ts "\$@"
++WRAP
++    chmod +x "$wrapper"
++    binary_path=""
++    echo -e "Installed Bun wrapper to ${MUTED}$wrapper${NC}"
++  else
++    binary_path="$candidate"
++  fi
++fi
++
++if [[ -n "$binary_path" ]]; then
++  if [[ ! -f "$binary_path" ]]; then
++    echo -e "${RED}Binary not found: $binary_path${NC}"
++    exit 1
++  fi
++  dest="$INSTALL_DIR/$APP"
++  cp "$binary_path" "$dest"
++  chmod +x "$dest"
++  echo -e "Installed ${MUTED}$dest${NC}"
++fi
++
++# Ensure isolation env in a small env file users can source
++mkdir -p "$HOME/.panacode"
++cat > "$HOME/.panacode/env" <<EOF
++# Panacode path isolation — do not point these at OpenCode dirs.
++export PANACODE_APP_DIR=panacode
++export OPENCODE_APP_DIR=panacode
++# Optional overrides:
++# export PANACODE_CONFIG_DIR="\$HOME/.config/panacode"
++EOF
++
++path_line='export PATH="$HOME/.panacode/bin:$PATH"'
++env_line='[ -f "$HOME/.panacode/env" ] && . "$HOME/.panacode/env"'
++
++if [[ "$no_modify_path" != true ]]; then
++  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
++    [[ -f "$rc" ]] || touch "$rc"
++    grep -Fqs '.panacode/bin' "$rc" || echo "$path_line" >> "$rc"
++    grep -Fqs '.panacode/env' "$rc" || echo "$env_line" >> "$rc"
++  done
++  echo -e "${MUTED}PATH + env wired in ~/.bashrc and ~/.zshrc (if present).${NC}"
++fi
++
++echo
++echo "Panacode CLI: $INSTALL_DIR/$APP"
++echo "Data dirs use XDG app name 'panacode' (not 'opencode')."
++echo "Open a new shell, then run:  panacode --help"
++echo "Sign in with PanaAI uses https://panaai-psi.vercel.app"
+diff --git a/packages/cli/bin/panacode.cjs b/packages/cli/bin/panacode.cjs
+new file mode 100644
+index 0000000..2004d04
+--- /dev/null
++++ b/packages/cli/bin/panacode.cjs
+@@ -0,0 +1,5 @@
++#!/usr/bin/env node
++// Panacode CLI entry — forces path isolation before loading the shared CLI.
++process.env.PANACODE_APP_DIR = process.env.PANACODE_APP_DIR || "panacode"
++process.env.OPENCODE_APP_DIR = process.env.OPENCODE_APP_DIR || process.env.PANACODE_APP_DIR
++require("./opencode.cjs")
+diff --git a/packages/cli/package.json b/packages/cli/package.json
+index 232259b..de457fe 100644
+--- a/packages/cli/package.json
++++ b/packages/cli/package.json
+@@ -6,7 +6,8 @@
+   "license": "MIT",
+   "bin": {
+     "opencode": "./bin/opencode.cjs",
+-    "opencode2": "./bin/opencode2.cjs"
++    "opencode2": "./bin/opencode2.cjs",
++    "panacode": "./bin/panacode.cjs"
+   },
+   "files": [
+     "bin"
+diff --git a/packages/core/src/panacode/product.ts b/packages/core/src/panacode/product.ts
+index 6fd0b89..31a1583 100644
+--- a/packages/core/src/panacode/product.ts
++++ b/packages/core/src/panacode/product.ts
+@@ -9,6 +9,15 @@ export const Product = {
+   name: "Panacode",
+   /** Upstream project this fork tracks. */
+   upstream: "OpenCode",
++  /**
++   * XDG / home app directory segment (`~/.local/share/<xdgApp>`, etc.).
++   * Must never be `opencode` — that collides with upstream OpenCode installs.
++   */
++  xdgApp: "panacode",
++  /** Preferred install bin dir for the curl installer. */
++  installBinDir: "~/.panacode/bin",
++  /** CLI binary name. */
++  cliBin: "panacode",
+   provider: {
+     id: "panaai",
+     name: "PanaAI",
+diff --git a/packages/util/src/global.ts b/packages/util/src/global.ts
+index 5fe51f8..8298c45 100644
+--- a/packages/util/src/global.ts
++++ b/packages/util/src/global.ts
+@@ -9,12 +9,13 @@ import { roots } from "#global-roots"
+ import { Flock } from "./flock.js"
+ import { makeGlobalNode } from "./effect/app-node.js"
+ 
+-const app = "opencode"
++/** Panacode XDG app name — must stay distinct from upstream OpenCode (`opencode`). */
++const app = process.env.PANACODE_APP_DIR?.trim() || process.env.OPENCODE_APP_DIR?.trim() || "panacode"
+ const { data, cache, config, state, tmp } = roots(app)
+ 
+ const paths = {
+   get home() {
+-    return process.env.OPENCODE_TEST_HOME ?? os.homedir()
++    return process.env.PANACODE_TEST_HOME ?? process.env.OPENCODE_TEST_HOME ?? os.homedir()
+   },
+   data,
+   bin: path.join(cache, "bin"),
+@@ -76,7 +77,11 @@ const acquire = (input: Partial<Interface>) =>
+ 
+ const layer = Layer.effect(
+   Service,
+-  Effect.suspend(() => acquire({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config })),
++  Effect.suspend(() =>
++    acquire({
++      config: process.env.PANACODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR ?? Path.config,
++    }),
++  ),
+ )
+ 
+ export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
+diff --git a/packages/util/src/observability/logging.ts b/packages/util/src/observability/logging.ts
+index d942afa..a505a89 100644
+--- a/packages/util/src/observability/logging.ts
++++ b/packages/util/src/observability/logging.ts
+@@ -57,8 +57,8 @@ function format(input: unknown) {
+ }
+ 
+ export function file(local = true, channel = "local") {
+-  if (!local) return path.join(Global.Path.log, "opencode.log")
+-  return path.join(Global.Path.log, `opencode-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.log`)
++  if (!local) return path.join(Global.Path.log, "panacode.log")
++  return path.join(Global.Path.log, `panacode-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.log`)
+ }
+ 
+ export function fileLogger(target = file(), id: string = runID()) {
+@@ -157,12 +157,12 @@ function lineStart(handle: FileSystem.File, from: number) {
+ }
+ 
+ const stderrLogger = Logger.make((options) => {
+-  if (process.env.OPENCODE_PRINT_LOGS !== "1") return
++  if (process.env.PANACODE_PRINT_LOGS !== "1" && process.env.OPENCODE_PRINT_LOGS !== "1") return
+   process.stderr.write(formatter().log(options) + "\n")
+ })
+ 
+ export function minimumLogLevel() {
+-  const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
++  const value = (process.env.PANACODE_LOG_LEVEL ?? process.env.OPENCODE_LOG_LEVEL)?.toUpperCase()
+   const levels = {
+     DEBUG: "Debug",
+     INFO: "Info",
+-- 
+2.43.0
+

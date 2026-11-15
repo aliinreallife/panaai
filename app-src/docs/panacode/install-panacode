@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Panacode installer — installs into ~/.panacode/bin (never ~/.opencode).
+# Modes:
+#   --from-source   build this checkout with Bun and install the binary
+#   --binary PATH   install an already-built panacode/opencode binary as `panacode`
+#   (default)       same as --from-source when run from a git checkout
+set -euo pipefail
+
+APP=panacode
+MUTED=$'\033[0;2m'
+RED=$'\033[0;31m'
+NC=$'\033[0m'
+
+usage() {
+  cat <<EOF
+Panacode Installer (isolated from OpenCode)
+
+Installs the CLI as \`$APP\` into \$HOME/.panacode/bin.
+Config/data use XDG dirs under the app name \`panacode\` (not \`opencode\`).
+
+Usage: ./install-panacode [options]
+
+Options:
+  -h, --help            Show help
+  --from-source         Build from this repository (requires Bun)
+  -b, --binary <path>   Install a local binary as panacode
+  --no-modify-path      Do not append PATH export to shell rc files
+
+Examples:
+  ./install-panacode --from-source
+  ./install-panacode --binary ./packages/cli/dist/.../bin/opencode
+EOF
+}
+
+from_source=false
+no_modify_path=false
+binary_path=""
+root="$(cd "$(dirname "$0")" && pwd)"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --from-source) from_source=true; shift ;;
+    --no-modify-path) no_modify_path=true; shift ;;
+    -b|--binary)
+      [[ -n "${2:-}" ]] || { echo -e "${RED}--binary requires a path${NC}"; exit 1; }
+      binary_path="$2"; shift 2 ;;
+    *) echo -e "${RED}Unknown option: $1${NC}"; usage; exit 1 ;;
+  esac
+done
+
+INSTALL_DIR="${PANACODE_INSTALL_DIR:-$HOME/.panacode/bin}"
+mkdir -p "$INSTALL_DIR"
+
+if [[ -z "$binary_path" ]]; then
+  from_source=true
+fi
+
+if [[ "$from_source" == true && -z "$binary_path" ]]; then
+  if ! command -v bun >/dev/null 2>&1; then
+    echo -e "${RED}Bun is required to build from source.${NC}"
+    echo "Install: curl -fsSL https://bun.sh/install | bash"
+    exit 1
+  fi
+  echo -e "${MUTED}Installing workspace deps…${NC}"
+  (cd "$root" && bun install)
+  echo -e "${MUTED}Building CLI…${NC}"
+  (cd "$root/packages/cli" && bun run build)
+  # Prefer a built binary named opencode or panacode under dist/
+  candidate="$(find "$root/packages/cli/dist" -type f \( -name panacode -o -name opencode \) 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$candidate" ]]; then
+    # Fallback: runnable wrapper via bun
+    wrapper="$INSTALL_DIR/$APP"
+    cat > "$wrapper" <<WRAP
+#!/usr/bin/env bash
+set -euo pipefail
+export PANACODE_APP_DIR="\${PANACODE_APP_DIR:-panacode}"
+export OPENCODE_APP_DIR="\$PANACODE_APP_DIR"
+ROOT="$root"
+exec bun run --cwd "\$ROOT/packages/cli" src/index.ts "\$@"
+WRAP
+    chmod +x "$wrapper"
+    binary_path=""
+    echo -e "Installed Bun wrapper to ${MUTED}$wrapper${NC}"
+  else
+    binary_path="$candidate"
+  fi
+fi
+
+if [[ -n "$binary_path" ]]; then
+  if [[ ! -f "$binary_path" ]]; then
+    echo -e "${RED}Binary not found: $binary_path${NC}"
+    exit 1
+  fi
+  dest="$INSTALL_DIR/$APP"
+  cp "$binary_path" "$dest"
+  chmod +x "$dest"
+  echo -e "Installed ${MUTED}$dest${NC}"
+fi
+
+# Ensure isolation env in a small env file users can source
+mkdir -p "$HOME/.panacode"
+cat > "$HOME/.panacode/env" <<EOF
+# Panacode path isolation — do not point these at OpenCode dirs.
+export PANACODE_APP_DIR=panacode
+export OPENCODE_APP_DIR=panacode
+# Optional overrides:
+# export PANACODE_CONFIG_DIR="\$HOME/.config/panacode"
+EOF
+
+path_line='export PATH="$HOME/.panacode/bin:$PATH"'
+env_line='[ -f "$HOME/.panacode/env" ] && . "$HOME/.panacode/env"'
+
+if [[ "$no_modify_path" != true ]]; then
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [[ -f "$rc" ]] || touch "$rc"
+    grep -Fqs '.panacode/bin' "$rc" || echo "$path_line" >> "$rc"
+    grep -Fqs '.panacode/env' "$rc" || echo "$env_line" >> "$rc"
+  done
+  echo -e "${MUTED}PATH + env wired in ~/.bashrc and ~/.zshrc (if present).${NC}"
+fi
+
+echo
+echo "Panacode CLI: $INSTALL_DIR/$APP"
+echo "Data dirs use XDG app name 'panacode' (not 'opencode')."
+echo "Open a new shell, then run:  panacode --help"
+echo "Sign in with PanaAI uses https://panaai-psi.vercel.app"
