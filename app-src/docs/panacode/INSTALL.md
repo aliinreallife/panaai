@@ -1,13 +1,30 @@
-# Install Panacode CLI
+# Install Panacode
 
-These binaries are built from the Panacode fork (PanaAI-only). They use XDG app name `panacode` and install under `~/.panacode` — they do **not** write OpenCode’s `~/.opencode`.
+Panacode is the PanaAI-branded OpenCode fork. Builds store config/history under `~/.panacode` (Windows: `%APPDATA%\ai.panacode.desktop*`) and never write OpenCode’s `~/.opencode` / `ai.opencode.desktop*`.
 
-## Linux / macOS
+Artifacts live in the panacode repo `release/` (CLI) and `release/desktop/` (Windows installer) when built from `cursor/panacode-windows-desktop-58f9` (or later).
+
+## Windows desktop (recommended)
+
+1. Get `panacode-desktop-win-x64.exe` (NSIS one-click).
+2. Run the installer — product name **Panacode**, app id `ai.panacode.desktop`.
+3. Open Panacode → **Sign in with PanaAI** (https://panaai-psi.vercel.app/connect/panacode).
+
+Unsigned builds may trigger SmartScreen — More info → Run anyway.
+
+Build from the panacode repo (Linux host needs `wine` + `wine32`):
+
+```bash
+OPENCODE_TARGET=windows-x64 OPENCODE_CHANNEL=prod bun run --cwd packages/desktop build
+OPENCODE_TARGET=windows-x64 OPENCODE_CHANNEL=prod bun run --cwd packages/desktop pack
+# → dist/desktop/panacode-desktop-win-x64.exe
+```
+
+## CLI — Linux / macOS
 
 ```bash
 mkdir -p ~/.panacode/bin
-# pick your platform binary, e.g. panacode-linux-x64
-cp panacode-linux-x64 ~/.panacode/bin/panacode
+cp panacode-linux-x64 ~/.panacode/bin/panacode   # or darwin-*
 chmod +x ~/.panacode/bin/panacode
 echo 'export PATH="$HOME/.panacode/bin:$PATH"' >> ~/.bashrc
 echo 'export PANACODE_APP_DIR=panacode' >> ~/.bashrc
@@ -15,16 +32,12 @@ source ~/.bashrc
 panacode --help
 ```
 
-Or from the repo:
+Or: `./install-panacode --binary ./packages/cli/dist/cli-linux-x64/bin/panacode`
 
-```bash
-./install-panacode --binary ./packages/cli/dist/cli-linux-x64/bin/opencode
-```
-
-## Windows
+## CLI — Windows
 
 Copy `panacode-windows-x64.exe` to `%USERPROFILE%\.panacode\bin\panacode.exe` and add that folder to PATH.
 
 ## Sign in
 
-Connect uses https://panaai-psi.vercel.app (`/connect/panacode`).
+Connect URL: https://panaai-psi.vercel.app/connect/panacode
