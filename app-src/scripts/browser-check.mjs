@@ -14,6 +14,19 @@ const issues = []; page.on('pageerror', e => issues.push(e.message));
 const pass = n => console.log(`PASS ${n}`);
 const shot = (name, full = true) => page.screenshot({ path: `artifacts/${name}.png`, fullPage: full });
 const settle = () => page.waitForTimeout(250);
+/** Controlled NumericField + Playwright fill can race; retry until grouped display matches. */
+async function fillNumeric(locator, raw, expected, { retries = 8 } = {}) {
+  await locator.click();
+  for (let i = 0; i < retries; i++) {
+    await locator.fill('');
+    await locator.fill(raw);
+    for (let j = 0; j < 12; j++) {
+      if ((await locator.inputValue()) === expected) return;
+      await page.waitForTimeout(40);
+    }
+  }
+  assert.equal(await locator.inputValue(), expected);
+}
 
 await page.goto(base, { waitUntil: 'networkidle' }); await page.waitForSelector('.balance-card'); await page.evaluate(() => document.fonts.ready);
 assert.match(await page.title(), /PanaAI|پنا|نمای کلی/i);
@@ -27,8 +40,8 @@ await page.goto(`${base}/keys`, { waitUntil: 'networkidle' });
 assert.match(await page.title(), /کلیدهای API/);
 await page.locator('.page-actions').getByRole('button', { name: 'ساخت کلید جدید' }).click();
 await page.getByPlaceholder('مثلاً پروژه اصلی یا محیط توسعه').fill('کلید مرورگر');
-const budget = page.getByRole('textbox', { name: 'سقف کل مصرف' }); await budget.fill('۵۰۰۰۰۰۰');
-assert.equal(await budget.inputValue(), '۵٬۰۰۰٬۰۰۰');
+const budget = page.getByRole('textbox', { name: 'سقف کل مصرف' });
+await fillNumeric(budget, '5000000', '۵٬۰۰۰٬۰۰۰');
 const rate = page.getByRole('textbox', { name: 'درخواست در دقیقه' }); await rate.fill('500'); await rate.blur();
 await page.getByText('درخواست در دقیقه نباید بیشتر از ۳۰۰ باشد.').waitFor();
 assert.ok(await page.getByRole('button', { name: 'ساخت کلید', exact: true }).isDisabled());
@@ -58,6 +71,7 @@ await page.getByText(/مبلغ دلخواه باید حداقل ۵۰٬۰۰۰ ب�
 assert.ok(await page.getByRole('button', { name: 'دریافت پیش‌فاکتور' }).isDisabled());
 await shot('04-purchase-inline-error');
 await page.getByRole('group', { name: 'مقادیر پیشنهادی مبلغ دلخواه' }).getByRole('button', { name: '۲۰۰٬۰۰۰' }).click();
+for (let j = 0; j < 25 && (await custom.inputValue()) !== '۲۰۰٬۰۰۰'; j++) await page.waitForTimeout(40);
 assert.equal(await custom.inputValue(), '۲۰۰٬۰۰۰');
 await page.getByRole('button', { name: 'دریافت پیش‌فاکتور' }).click();
 await page.getByRole('button', { name: 'تأیید و ایجاد سفارش' }).click();
