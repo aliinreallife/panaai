@@ -397,14 +397,119 @@ export async function revokeCappedUpstream(platformKeyId: string, userId: string
 }
 
 /**
+ * Replace a shared uncapped CVC key with a freshly minted limited one.
+ * Used when local meta has no tokenLimit (legacy / unlimited remote) or when
+ * CVC rejects absolute `token_limit` edits (`unlimited_token_limit`).
+ */
+async function remintSharedUncapped(
+  user: User,
+  row: UpstreamRow,
+  tokenLimit: number,
+  reason: string,
+  pool: { unallocated: number; allocated: number },
+): Promise<{ ok: true; tokenLimit: number; prefix: string } | { ok: false; code: string | null }> {
+  const limit = Math.max(1, Math.floor(tokenLimit));
+  let oldKey: string | null = null;
+  try {
+    oldKey = await decryptSecret(row.encryptedSecret);
+  } catch {
+    logger.error("upstream_key.decrypt_failed", { userId: user.id, prefix: row.prefix, reason: "remint_shared" });
+  }
+
+  let minted: Awaited<ReturnType<typeof callCvcMint>>["minted"];
+  try {
+    ({ minted } = await callCvcMint(user, {
+      kind: "shared_uncapped",
+      tokenLimit: limit,
+      reason: `remint:${reason}`,
+    }));
+  } catch {
+    return { ok: false, code: "mint_failed" };
+  }
+
+  if (oldKey) {
+    const deleted = await editDelegatedKey({ key: oldKey, delete: true });
+    if (!deleted.ok) {
+      const frozen = await editDelegatedKey({ key: oldKey, active: false });
+      logger.warn("upstream_key.remint_old_cleanup", {
+        userId: user.id,
+        oldPrefix: row.prefix,
+        deleted: false,
+        frozen: frozen.ok,
+        deleteCode: deleted.code,
+        freezeCode: frozen.ok ? null : frozen.code,
+      });
+    }
+  }
+
+  const encryptedSecret = await encryptSecret(minted.data.key);
+  const prefix = prefixOf(minted.data.key);
+  const upstreamRef = typeof minted.data.meta.id === "string"
+    ? minted.data.meta.id
+    : typeof minted.data.meta.key_id === "string"
+      ? minted.data.meta.key_id
+      : null;
+  const tokensUsed = metaNumber(minted.data.meta, "tokens_used", "tokensUsed") ?? 0;
+  const nextLimit = metaNumber(minted.data.meta, "token_limit", "tokenLimit") ?? limit;
+
+  await db.update(s.upstreamCredentials).set({
+    encryptedSecret,
+    prefix,
+    upstreamRef,
+    meta: {
+      ...row.meta,
+      source: minted.source,
+      remintedAt: new Date().toISOString(),
+      remintReason: reason,
+      previousPrefix: row.prefix,
+      tokenLimit: nextLimit,
+      tokensUsed,
+      syncedAt: new Date().toISOString(),
+      syncReason: reason,
+      unallocatedAtSync: pool.unallocated,
+      kind: "shared_uncapped",
+    },
+    rotatedAt: new Date(),
+  }).where(eq(s.upstreamCredentials.id, row.id));
+
+  await db.insert(s.audit).values({
+    userId: user.id,
+    action: "upstream_key.reminted",
+    targetId: user.id,
+    details: {
+      reason,
+      kind: "shared_uncapped",
+      previousPrefix: row.prefix,
+      prefix,
+      tokenLimit: nextLimit,
+      unallocated: pool.unallocated,
+      allocated: pool.allocated,
+    },
+  });
+  logger.info("upstream_key.reminted", {
+    userId: user.id,
+    reason,
+    kind: "shared_uncapped",
+    previousPrefix: row.prefix,
+    prefix,
+    tokenLimit: nextLimit,
+    unallocated: pool.unallocated,
+  });
+  return { ok: true, tokenLimit: nextLimit, prefix };
+}
+
+/**
  * Sync the shared uncapped CVC token_limit to current unallocated credits.
  * Does not touch PanaAI secrets or capped per-key CVC credentials.
+ *
+ * Grow uses `additional_tokens`. Shrink / unknown / CVC `unlimited_token_limit`
+ * heals by reminting a new limited shared key (edit cannot convert unlimited → capped).
  */
 export async function syncSharedUncappedLimit(
   user: User,
   reason: "wallet_topup" | "key_revoke" | "key_budget" | "manual" = "manual",
   opts: { allowGrow?: boolean } = {},
-): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null }> {
+): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null }> {
   const cfg = cvcConfig();
   if (!cfg.primaryKey) return { synced: false, tokenLimit: null, previousLimit: null };
 
@@ -421,7 +526,7 @@ export async function syncSharedUncappedLimit(
   if (storedLimit != null && desiredLimit === storedLimit) {
     return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit };
   }
-  const previousLimit = storedLimit ?? desiredLimit;
+  const previousLimit = storedLimit;
   // Never raise shared while a capped CVC key may still hold upstream capacity (failed/frozen revoke).
   if (storedLimit != null && desiredLimit > storedLimit && opts.allowGrow === false) {
     logger.warn("upstream_key.sync_grow_blocked", {
@@ -434,6 +539,25 @@ export async function syncSharedUncappedLimit(
     return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit };
   }
 
+  // No local limit (legacy unlimited shared) → remint a properly capped key.
+  if (storedLimit == null) {
+    const reminted = await remintSharedUncapped(user, row, desiredLimit, reason, pool);
+    if (!reminted.ok) {
+      logger.error("upstream_key.sync_failed", {
+        userId: user.id,
+        reason,
+        kind: "shared_uncapped",
+        code: reminted.code,
+        previousLimit: null,
+        desiredLimit,
+        unallocated: pool.unallocated,
+        heal: "remint",
+      });
+      return { synced: false, tokenLimit: null, previousLimit: null, healed: false, code: reminted.code };
+    }
+    return { synced: true, tokenLimit: reminted.tokenLimit, previousLimit: null, healed: true };
+  }
+
   let plaintext: string;
   try {
     plaintext = await decryptSecret(row.encryptedSecret);
@@ -442,22 +566,40 @@ export async function syncSharedUncappedLimit(
     return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit };
   }
 
-  // Unknown stored limit → set absolute token_limit. Known grow → additional_tokens.
-  const edited = storedLimit == null || desiredLimit <= storedLimit
-    ? await editDelegatedKey({ key: plaintext, token_limit: Math.max(tokensUsed, desiredLimit) })
-    : await editDelegatedKey({ key: plaintext, additional_tokens: desiredLimit - storedLimit });
+  const growing = desiredLimit > storedLimit;
+  const edited = growing
+    ? await editDelegatedKey({ key: plaintext, additional_tokens: desiredLimit - storedLimit })
+    : await editDelegatedKey({ key: plaintext, token_limit: Math.max(tokensUsed, desiredLimit) });
 
   if (!edited.ok) {
+    // CVC refuses absolute token_limit on unlimited / some keys — heal by remint.
+    if (edited.code === "unlimited_token_limit" || !growing) {
+      const reminted = await remintSharedUncapped(user, row, desiredLimit, reason, pool);
+      if (reminted.ok) {
+        return { synced: true, tokenLimit: reminted.tokenLimit, previousLimit: storedLimit, healed: true, code: edited.code };
+      }
+      logger.error("upstream_key.sync_failed", {
+        userId: user.id,
+        reason,
+        kind: "shared_uncapped",
+        code: reminted.code ?? edited.code,
+        previousLimit: storedLimit,
+        desiredLimit,
+        unallocated: pool.unallocated,
+        heal: "remint_failed",
+      });
+      return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit, healed: false, code: reminted.code ?? edited.code };
+    }
     logger.error("upstream_key.sync_failed", {
       userId: user.id,
       reason,
       kind: "shared_uncapped",
       code: edited.code,
-      previousLimit,
+      previousLimit: storedLimit,
       desiredLimit,
       unallocated: pool.unallocated,
     });
-    return { synced: false, tokenLimit: previousLimit, previousLimit };
+    return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit, code: edited.code };
   }
 
   const nextLimit = metaNumber(edited.data.meta, "token_limit", "tokenLimit") ?? desiredLimit;
@@ -481,7 +623,7 @@ export async function syncSharedUncappedLimit(
     details: {
       reason,
       kind: "shared_uncapped",
-      previousLimit,
+      previousLimit: storedLimit,
       tokenLimit: nextLimit,
       unallocated: pool.unallocated,
       allocated: pool.allocated,
@@ -491,11 +633,11 @@ export async function syncSharedUncappedLimit(
     userId: user.id,
     reason,
     kind: "shared_uncapped",
-    previousLimit,
+    previousLimit: storedLimit,
     tokenLimit: nextLimit,
     unallocated: pool.unallocated,
   });
-  return { synced: true, tokenLimit: nextLimit, previousLimit };
+  return { synced: true, tokenLimit: nextLimit, previousLimit: storedLimit };
 }
 
 /** Align a capped CVC key's lifetime limit with its PanaAI budget (edit, not remint). */
@@ -546,7 +688,7 @@ export async function syncUpstreamTokenLimitSafe(
   user: User,
   reason: Parameters<typeof syncSharedUncappedLimit>[1],
   opts?: Parameters<typeof syncSharedUncappedLimit>[2],
-) {
+): Promise<{ synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null }> {
   try {
     return await syncSharedUncappedLimit(user, reason, opts);
   } catch (error) {
@@ -555,7 +697,7 @@ export async function syncUpstreamTokenLimitSafe(
       reason,
       message: error instanceof Error ? error.message : "unknown",
     });
-    return { synced: false, tokenLimit: null, previousLimit: null };
+    return { synced: false, tokenLimit: null, previousLimit: null, healed: false, code: "exception" };
   }
 }
 

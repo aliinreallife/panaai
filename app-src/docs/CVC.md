@@ -32,7 +32,7 @@ Never put the CVC key in the browser, logs or customer responses. Redact `sk-cvc
    - **Budgeted (capped) PanaAI key** → its **own** delegated CVC key with `token_limit` from that budget (hard-capped by `system.cvcDelegatedTokenCap`).
    - **No-budget PanaAI keys** of the same user → **one shared** CVC key sized to **unallocated** credits.
    - Usage/analytics still log the **PanaAI key name**, so uncapped keys stay distinguishable in our UI.
-   - Rotate only replaces the PanaAI secret (capped CVC row is relinked). Top-up / create / revoke / budget changes sync the **shared** CVC `token_limit` via `POST /v1/keys/edit`.
+   - Rotate only replaces the PanaAI secret (capped CVC row is relinked). Top-up / create / revoke / budget changes sync the **shared** CVC limit: grow via `additional_tokens`, shrink via `token_limit`. Legacy unlimited shared keys (missing local `tokenLimit`, or CVC `unlimited_token_limit`) are **reminted** with a hard cap; the old remote key is deleted/frozen.
    - Revoke (or cap→uncapped) **deletes** the capped CVC key remotely (falls back to `active: false`). Shared only **grows** after a successful remote delete (frozen/failed revoke never raises shared — avoids double-issuing against CVC primary).
    - **Never mint unlimited** CVC keys — size follows wallet/budget with a high safety ceiling (`cvcDelegatedTokenCap`, default 100M).
 3. `CVC_PRIMARY_API_KEY` is for **management** (mint delegated keys, catalog sync, platform balance/coverage). It is never used as the shared chat runtime key for all customers.
