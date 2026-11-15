@@ -414,22 +414,24 @@ export async function syncSharedUncappedLimit(
   const settings = systemSettings(user.settings);
   const pool = await walletAllocation(user.id);
   const tokensUsed = metaNumber(row.meta, "tokensUsed", "tokens_used") ?? 0;
-  const previousLimit = metaNumber(row.meta, "tokenLimit", "token_limit")
-    ?? desiredSharedTokenLimit(pool.unallocated, tokensUsed, settings);
+  // Never invent previousLimit from desired — a missing stored limit used to make
+  // desired===previous and skip sync forever (shared meta stayed tokenLimit=—).
+  const storedLimit = metaNumber(row.meta, "tokenLimit", "token_limit");
   const desiredLimit = desiredSharedTokenLimit(pool.unallocated, tokensUsed, settings);
-  if (desiredLimit === previousLimit) {
-    return { synced: false, tokenLimit: previousLimit, previousLimit };
+  if (storedLimit != null && desiredLimit === storedLimit) {
+    return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit };
   }
+  const previousLimit = storedLimit ?? desiredLimit;
   // Never raise shared while a capped CVC key may still hold upstream capacity (failed/frozen revoke).
-  if (desiredLimit > previousLimit && opts.allowGrow === false) {
+  if (storedLimit != null && desiredLimit > storedLimit && opts.allowGrow === false) {
     logger.warn("upstream_key.sync_grow_blocked", {
       userId: user.id,
       reason,
-      previousLimit,
+      previousLimit: storedLimit,
       desiredLimit,
       unallocated: pool.unallocated,
     });
-    return { synced: false, tokenLimit: previousLimit, previousLimit };
+    return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit };
   }
 
   let plaintext: string;
@@ -437,12 +439,13 @@ export async function syncSharedUncappedLimit(
     plaintext = await decryptSecret(row.encryptedSecret);
   } catch {
     logger.error("upstream_key.decrypt_failed", { userId: user.id, prefix: row.prefix, reason: "sync_shared" });
-    return { synced: false, tokenLimit: previousLimit, previousLimit };
+    return { synced: false, tokenLimit: storedLimit, previousLimit: storedLimit };
   }
 
-  const edited = desiredLimit > previousLimit
-    ? await editDelegatedKey({ key: plaintext, additional_tokens: desiredLimit - previousLimit })
-    : await editDelegatedKey({ key: plaintext, token_limit: Math.max(tokensUsed, desiredLimit) });
+  // Unknown stored limit → set absolute token_limit. Known grow → additional_tokens.
+  const edited = storedLimit == null || desiredLimit <= storedLimit
+    ? await editDelegatedKey({ key: plaintext, token_limit: Math.max(tokensUsed, desiredLimit) })
+    : await editDelegatedKey({ key: plaintext, additional_tokens: desiredLimit - storedLimit });
 
   if (!edited.ok) {
     logger.error("upstream_key.sync_failed", {
@@ -508,24 +511,24 @@ export async function syncCappedKeyLimit(
   if (!row) return { synced: false as const, tokenLimit: null };
   const settings = systemSettings(user.settings);
   const tokensUsed = metaNumber(row.meta, "tokensUsed", "tokens_used") ?? 0;
-  const previousLimit = metaNumber(row.meta, "tokenLimit", "token_limit")
-    ?? desiredCappedTokenLimit(budget, tokensUsed, settings);
+  const storedLimit = metaNumber(row.meta, "tokenLimit", "token_limit");
   // Absolute lifetime from budget — never tokensUsed + budget (that over-issues after spend).
   const desiredLimit = desiredCappedTokenLimit(budget, tokensUsed, settings);
-  if (desiredLimit === previousLimit) return { synced: false as const, tokenLimit: previousLimit };
+  if (storedLimit != null && desiredLimit === storedLimit) return { synced: false as const, tokenLimit: storedLimit };
+  const previousLimit = storedLimit ?? desiredLimit;
 
   let plaintext: string;
   try {
     plaintext = await decryptSecret(row.encryptedSecret);
   } catch {
-    return { synced: false as const, tokenLimit: previousLimit };
+    return { synced: false as const, tokenLimit: storedLimit };
   }
-  const edited = desiredLimit > previousLimit
-    ? await editDelegatedKey({ key: plaintext, additional_tokens: desiredLimit - previousLimit })
-    : await editDelegatedKey({ key: plaintext, token_limit: Math.max(tokensUsed, desiredLimit) });
+  const edited = storedLimit == null || desiredLimit <= storedLimit
+    ? await editDelegatedKey({ key: plaintext, token_limit: Math.max(tokensUsed, desiredLimit) })
+    : await editDelegatedKey({ key: plaintext, additional_tokens: desiredLimit - storedLimit });
   if (!edited.ok) {
     logger.error("upstream_key.sync_failed", { userId: user.id, kind: "capped", platformKeyId, code: edited.code, reason });
-    return { synced: false as const, tokenLimit: previousLimit };
+    return { synced: false as const, tokenLimit: storedLimit };
   }
   const nextLimit = metaNumber(edited.data.meta, "token_limit", "tokenLimit") ?? desiredLimit;
   const nextUsed = metaNumber(edited.data.meta, "tokens_used", "tokensUsed") ?? tokensUsed;
