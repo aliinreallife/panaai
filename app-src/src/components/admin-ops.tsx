@@ -347,7 +347,7 @@ export function CvcFinanceDrillPanel() {
     <div className="section-title">
       <div>
         <h2>آزمون کلی CVC</h2>
-        <p>یک کلیک: Token A/B/C ساخته و روی CVC mint می‌شوند؛ یک «hi» ارزان روی A زده می‌شود (نه ۱M)؛ سپس C حذف و A لغو — چک‌لیست با پیشوندهای واقعی. در پایان فقط کلید shared مربوط به B روی CVC می‌ماند.</p>
+        <p>یک کلیک: Token A/B/C ساخته و روی CVC mint می‌شوند؛ یک «hi» ارزان روی A زده می‌شود (نه ۱M)؛ سپس C حذف و A لغو — چک‌لیست با پیشوندهای واقعی. A/C بعد از اجرا روی CVC حذف‌اند؛ فقط shared مربوط به B می‌ماند. اگر بعد از remint دو کلید shared دیدید، active را نگه دارید و previousPrefix را دستی حذف کنید.</p>
       </div>
       <Button tone={report && !report.ok ? "danger" : "primary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}>
         <Icon name="keys" size={16} />اجرای آزمون کلی
