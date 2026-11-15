@@ -324,6 +324,7 @@ type CvcDrillReport = {
   tokens: DrillToken[];
   checks: DrillCheck[];
   pool: { available: number; allocated: number; unallocated: number };
+  tinySpend?: number;
 };
 
 /** One-click soft-allocation / CVC create-spend-revoke drill with a human checklist. */
@@ -346,7 +347,7 @@ export function CvcFinanceDrillPanel() {
     <div className="section-title">
       <div>
         <h2>آزمون کلی CVC</h2>
-        <p>یک کلیک: Token A سقف‌دار، B بدون سقف، C سقف‌دار ساخته می‌شود؛ ۱M روی A مصرف، C حذف، A لغو — بعد چک‌لیست با پیشوندهای واقعی pana-… برای تأیید دستی.</p>
+        <p>یک کلیک: Token A/B/C ساخته و روی CVC mint می‌شوند؛ یک «hi» ارزان روی A زده می‌شود (نه ۱M)؛ سپس C حذف و A لغو — چک‌لیست با پیشوندهای واقعی. در پایان فقط کلید shared مربوط به B روی CVC می‌ماند.</p>
       </div>
       <Button tone={report && !report.ok ? "danger" : "primary"} busy={busy} disabled={!allowed("finance.adjust")} onClick={run}>
         <Icon name="keys" size={16} />اجرای آزمون کلی
@@ -355,7 +356,7 @@ export function CvcFinanceDrillPanel() {
     {report ? <>
       <Notice tone={report.ok ? "success" : "danger"} title={report.ok ? "سناریو از نظر سیستم پاس شد — شما هم دستی تأیید کنید" : "سناریو مغایرت دارد"}>
         {report.scenario}
-        <span className="cell-subtitle">{report.mode} · CVC {report.cvcConfigured ? "configured" : "not configured"} · {persianTime(report.ranAt)}</span>
+        <span className="cell-subtitle">{report.mode} · CVC {report.cvcConfigured ? "configured" : "not configured"}{report.tinySpend != null ? ` · tiny spend ${fa(report.tinySpend)}` : ""} · {persianTime(report.ranAt)}</span>
       </Notice>
       <div className="table-scroll"><table><thead><tr><th>Token</th><th>pana prefix</th><th>CVC</th><th>وضعیت مورد انتظار</th><th>spent / budget</th></tr></thead><tbody>
         {report.tokens.map(t => <tr key={t.label} className={t.enabled && (t.label === "A" || t.label === "C") ? "row-danger" : undefined}>

@@ -46,7 +46,7 @@ Wallet available **20M**. Create capped budget **5M** → unallocated **15M** (s
 
 ## Operator drill (button)
 
-Admin → مالی → **آزمون کلید CVC**: one click creates labeled tokens A (capped 5M), B (uncapped), C (capped 2M), spends 1M on A, removes C, revokes A, then shows a checklist with real `pana-…` / CVC prefixes (`Token A should be revoked`, `Token C removed`, `Token B active`, shared limit raised). Automated asserts live in `scripts/cvc-finance-check.mjs`; the button is for human confirmation against Keys + CVC dashboard.
+Admin → مالی → **آزمون کلی CVC**: creates A (capped 5M), B (uncapped), C (capped 2M), mints CVC keys, runs a tiny live `"hi"` on A (real `cost_tokens`, not a fake 1M debit), removes C, revokes A, then shows a checklist with real `pana-…` / CVC prefixes. After the run only shared B should remain on CVC (A/C are deleted by design). Automated asserts: `scripts/cvc-finance-check.mjs`.
 
 ## Still required for a full commercial launch
 
