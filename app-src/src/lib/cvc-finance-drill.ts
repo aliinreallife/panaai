@@ -358,11 +358,21 @@ export async function runCvcFinanceDrill(user: User): Promise<CvcFinanceDrillRep
   const desiredShared = desiredSharedTokenLimit(pool.unallocated, 0, settings);
 
   let sharedMeta = { prefix: cvcB?.prefix ?? null as string | null, tokenLimit: null as number | null, tokensUsed: 0 };
+  let sharedSync: { synced: boolean; tokenLimit: number | null; previousLimit: number | null; healed?: boolean; code?: string | null } = {
+    synced: false,
+    tokenLimit: null,
+    previousLimit: null,
+  };
   if (!isDemo && cvcConfigured) {
-    await syncUpstreamTokenLimitSafe(user, "key_revoke", {
+    sharedSync = await syncUpstreamTokenLimitSafe(user, "key_revoke", {
       allowGrow: remoteRevokeFreesUpstreamPool(remoteA.remote) && remoteRevokeFreesUpstreamPool(remoteC.remote),
     });
     sharedMeta = await readSharedMeta(user.id);
+    steps.push(
+      `Shared CVC sync: synced=${sharedSync.synced}, healed=${sharedSync.healed === true}, `
+      + `tokenLimit=${sharedMeta.tokenLimit ?? "—"}, code=${sharedSync.code ?? "ok"}, prefix=${sharedMeta.prefix ?? "—"}.`,
+    );
+    if (sharedMeta.prefix && cvcB) cvcB = { ...cvcB, prefix: sharedMeta.prefix, tokenLimit: sharedMeta.tokenLimit };
   }
 
   const [rowA] = await db.select().from(s.keys).where(eq(s.keys.id, tokenA.id));
@@ -512,7 +522,7 @@ export async function runCvcFinanceDrill(user: User): Promise<CvcFinanceDrillRep
         ? `shared token_limit ≈ ${desiredShared.toLocaleString("en-US")} (used+remaining); grow only if remote deletes succeeded`
         : "skipped without live CVC primary",
       actual: cvcConfigured && !isDemo
-        ? `sharedPrefix=${sharedMeta.prefix ?? "—"}, tokenLimit=${sharedMeta.tokenLimit ?? "—"}, remoteA=${remoteA.remote}, remoteC=${remoteC.remote}`
+        ? `sharedPrefix=${sharedMeta.prefix ?? "—"}, tokenLimit=${sharedMeta.tokenLimit ?? "—"}, synced=${sharedSync.synced}, healed=${sharedSync.healed === true}, code=${sharedSync.code ?? "ok"}, remoteA=${remoteA.remote}, remoteC=${remoteC.remote}`
         : "CVC not exercised",
       pass: !cvcConfigured || isDemo
         ? true
@@ -520,7 +530,7 @@ export async function runCvcFinanceDrill(user: User): Promise<CvcFinanceDrillRep
           ? sharedMeta.tokenLimit != null && sharedMeta.tokenLimit >= pool.unallocated
           : true,
       hint: cvcB || sharedMeta.prefix
-        ? `On CVC, open shared key ${cvcB?.prefix ?? sharedMeta.prefix} — limit should reflect ~${pool.unallocated.toLocaleString("en-US")} free credits.`
+        ? `On CVC, open shared key ${sharedMeta.prefix ?? cvcB?.prefix} — limit should reflect ~${pool.unallocated.toLocaleString("en-US")} free credits. Legacy unlimited shared keys are reminted on sync.`
         : "Provision shared CVC on first uncapped use when primary is configured.",
       cvcPrefix: cvcB?.prefix ?? sharedMeta.prefix,
       panaPrefix: tokenB.prefix,

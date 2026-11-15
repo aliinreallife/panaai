@@ -141,6 +141,26 @@ try {
   assert.equal(shrunk.ok, true);
   assert.equal(calls.at(-1).body.token_limit, 15_000_000);
   pass("CVC create / delete / additional_tokens / token_limit edit payloads");
+
+  // Document CVC rejection that forces remint heal in syncSharedUncappedLimit.
+  calls.length = 0;
+  globalThis.fetch = async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : null;
+    calls.push({ url: String(url), method: init.method || "GET", body });
+    if (String(url).endsWith("/v1/keys/edit") && init.method === "POST" && body.token_limit != null) {
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { code: "unlimited_token_limit", message: "cannot set absolute limit on unlimited key" } }),
+        text: async () => "",
+      };
+    }
+    return { ok: false, status: 500, json: async () => ({}), text: async () => "unexpected" };
+  };
+  const rejected = await c.editDelegatedKey({ key: minted.data.key, token_limit: 25_000_000 }, cfg);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.code, "unlimited_token_limit");
+  pass("CVC edit token_limit → unlimited_token_limit (triggers shared remint heal)");
 } finally {
   globalThis.fetch = originalFetch;
 }
