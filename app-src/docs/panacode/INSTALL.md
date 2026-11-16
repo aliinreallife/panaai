@@ -6,8 +6,10 @@ Artifacts live in the panacode repo `release/` (CLI) and `release/desktop/` (Win
 
 ## Windows desktop (recommended)
 
-1. Get `panacode-desktop-win-x64.exe` (NSIS one-click).
-2. Run the installer — product name **Panacode**, app id `ai.panacode.desktop`.
+1. Download the NSIS installer:  
+   https://github.com/aliinreallife/panaai/releases/download/panacode-desktop-win-x64/panacode-desktop-win-x64.exe  
+   (release page: https://github.com/aliinreallife/panaai/releases/tag/panacode-desktop-win-x64)
+2. Run it — product name **Panacode**, app id `ai.panacode.desktop` (separate from OpenCode).
 3. Open Panacode → **Sign in with PanaAI** (https://panaai-psi.vercel.app/connect/panacode).
 
 Unsigned builds may trigger SmartScreen — More info → Run anyway.
