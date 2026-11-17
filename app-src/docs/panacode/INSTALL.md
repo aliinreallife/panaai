@@ -20,7 +20,12 @@ If a previous build stuck on the loading screen (or you see `Timed out waiting f
 2. Delete everything matching `%USERPROFILE%\.local\state\panacode\service*.json`.
 3. Install the latest release build and relaunch.
 
-r3 fixes a mismatch where the app looked for `service.json` while the bundled CLI wrote `service-<channel>.json`.
+If chat fails with `Cannot find package '@opencode/ai'` for a `panaai/...` model, install **r4+** (the CLI must embed the panaai provider).
+
+Release notes:
+
+- **r3** — fixed `service.json` vs `service-<channel>.json` so the desktop finds the background CLI.
+- **r4** — embeds `@opencode/ai/providers/panaai` in the bundled CLI so PanaAI models initialize for chat.
 
 Build from the panacode repo (Linux host needs `wine` + `wine32`):
 
