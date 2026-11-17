@@ -55,4 +55,10 @@ Copy `panacode-windows-x64.exe` to `%USERPROFILE%\.panacode\bin\panacode.exe` an
 
 ## Sign in
 
-Connect URL: https://panaai-psi.vercel.app/connect/panacode
+Connect URL (hosted demo): https://panaai-psi.vercel.app/connect/panacode
+
+### Self-hosted PanaAI (no Vercel)
+
+Run the Next.js app from `app-src` on any Node VPS — see **`docs/DEPLOY.md` §3** (Postgres, systemd, Caddy/nginx, cron).
+
+To use that server from Panacode without rebuilding the desktop app: create a `pana-…` API key on your site and set the panaai provider `baseURL` to `https://your-domain/v1` (plus the key). Browser “Sign in with PanaAI” still opens the baked-in auth host until you rebuild Panacode with your `authURL` / `baseURL` in `packages/core/src/panacode/product.ts`.

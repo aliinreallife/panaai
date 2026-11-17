@@ -144,14 +144,149 @@ Open `https://<your-project>.vercel.app/api/health`. It should return OK. Then o
 
 ---
 
-## 3. Any Node server or VPS
+## 3. Own server / VPS (no Vercel)
+
+This is the supported non-Vercel path: Node + Postgres on one machine (or Postgres elsewhere), HTTPS via Caddy/nginx, and a daily cron for maintenance.
+
+**You need:** a Linux VPS, Node.js 20+ (22 recommended), PostgreSQL 14+, a domain pointed at the VPS, and ports 80/443 open.
+
+### 3.1 Database
 
 ```bash
-npm ci && npm run build
-DATABASE_URL=... RECEIPT_ENCRYPTION_KEY=... npm start   # listens on PORT (default 3000)
+# Example: Postgres in Docker on the same host
+docker run -d --name panaai-db --restart unless-stopped \
+  -e POSTGRES_PASSWORD=CHANGE_ME -e POSTGRES_DB=app_db \
+  -v panaai-pg:/var/lib/postgresql/data -p 127.0.0.1:5432:5432 \
+  postgres:16
 ```
 
-Put it behind nginx or Caddy for HTTPS. Without `RECEIPT_ENCRYPTION_KEY`, sandbox mode writes a key to `.private/sandbox.key`. Keep that folder on persistent storage and back it up. On a VPS the 8 MB receipt limit applies in full, and the in-memory rate limits work as intended because there is only one process.
+Or install Postgres from your distro and create a database/user. Prefer binding Postgres to localhost only.
+
+### 3.2 App
+
+```bash
+# As a deploy user with the repo checked out (app-src/ is the Next.js app)
+cd /opt/panaai/app-src   # or wherever you keep the code
+npm ci
+
+cp .env.example .env
+# Edit .env — minimum:
+#   DATABASE_URL=postgresql://USER:PASS@127.0.0.1:5432/app_db
+#   RECEIPT_ENCRYPTION_KEY=$(openssl rand -hex 32)   # required; never rotate casually
+#   NEXT_PUBLIC_SITE_URL=https://panaai.example.com
+#   PLATFORM_MODE=sandbox   # or live after PRODUCTION.md checklist
+# Optional live integrations: KAVENEGAR_*, CVC_*, ADMIN_PHONES, CRON_SECRET
+
+npm run db:push
+npm run build
+```
+
+Run once to smoke-test:
+
+```bash
+PORT=3000 npm start
+# open https://your-domain after reverse-proxy, or http://SERVER_IP:3000 temporarily
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+Without `RECEIPT_ENCRYPTION_KEY`, sandbox mode writes a key under `.private/sandbox.key`. Prefer setting `RECEIPT_ENCRYPTION_KEY` explicitly and backing it up. Keep `.private/` on persistent disk if you rely on the generated file.
+
+### 3.3 systemd unit
+
+```ini
+# /etc/systemd/system/panaai.service
+[Unit]
+Description=PanaAI
+After=network.target postgresql.service docker.service
+
+[Service]
+Type=simple
+User=panaai
+WorkingDirectory=/opt/panaai/app-src
+EnvironmentFile=/opt/panaai/app-src/.env
+Environment=NODE_ENV=production PORT=3000
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now panaai
+sudo systemctl status panaai
+```
+
+### 3.4 HTTPS (Caddy example)
+
+```caddy
+# /etc/caddy/Caddyfile
+panaai.example.com {
+  reverse_proxy 127.0.0.1:3000
+  encode gzip
+  request_body {
+    max_size 8MB
+  }
+}
+```
+
+nginx equivalent: `proxy_pass http://127.0.0.1:3000;` with TLS (Certbot) and `client_max_body_size 8m;`.
+
+Set `NEXT_PUBLIC_SITE_URL=https://panaai.example.com` to match the public origin, then rebuild (`npm run build`) and restart if you change it.
+
+### 3.5 Maintenance cron (replaces Vercel Cron)
+
+Vercel Cron hits `/api/cron/maintenance` daily. On a VPS, schedule it yourself:
+
+```bash
+# Generate once and put the same value in .env as CRON_SECRET
+openssl rand -hex 24
+```
+
+```cron
+# crontab -e  (as a user that can curl localhost)
+0 3 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/maintenance >/dev/null
+```
+
+Optional catalog refresh (if you use that route): call `/api/cron/catalog` the same way with the same bearer.
+
+### 3.6 Point Panacode at your server
+
+Stock Windows/desktop builds open **Sign in with PanaAI** on `https://panaai-psi.vercel.app`. For your own host:
+
+1. **API key (no rebuild):** create a `pana-…` key on your site (after login), then in Panacode configure the panaai provider with:
+   - API key = that secret  
+   - `baseURL` = `https://panaai.example.com/v1`  
+   Example `~/.config/panacode/panacode.json` (Linux/mac; Windows uses the Panacode AppData config dir):
+
+   ```json
+   {
+     "providers": {
+       "panaai": {
+         "settings": {
+           "baseURL": "https://panaai.example.com/v1",
+           "apiKey": "pana-…"
+         }
+       }
+     }
+   }
+   ```
+
+2. **Browser connect on your domain:** change `Product.provider.baseURL` and `Product.provider.authURL` in panacode `packages/core/src/panacode/product.ts` to your origin (`…/v1` and site root), rebuild the CLI/desktop, and ship that build. Stock r4 installers still target the Vercel host for OAuth.
+
+Health check after cutover: `https://panaai.example.com/api/health` and `https://panaai.example.com/v1/models` with a Bearer key.
+
+### 3.7 Notes vs Vercel
+
+| Topic | VPS |
+|---|---|
+| Body size | Full 8 MB receipt limit (no 4.5 MB platform cap) |
+| Rate limits | One Node process → in-memory / DB limits behave as designed |
+| Secrets | Own `.env`; never commit it |
+| Updates | `git pull` → `npm ci` → `npm run db:push` → `npm run build` → `systemctl restart panaai` |
+| Live mode | Same checklist as `docs/PRODUCTION.md` (`PLATFORM_MODE=live`, Kavenegar, CVC, …) |
 
 ---
 
