@@ -14,7 +14,13 @@ Artifacts live in the panacode repo `release/` (CLI) and `release/desktop/` (Win
 
 Unsigned builds may trigger SmartScreen — More info → Run anyway.
 
-If a previous build stuck on the loading screen: quit Panacode, delete `%USERPROFILE%\.local\state\panacode\service.json` (and any `service-*.json` next to it), then reinstall/relaunch.
+If a previous build stuck on the loading screen (or you see `Timed out waiting for the background service to start`):
+
+1. Quit Panacode completely (Task Manager → end `Panacode.exe` / `panacode-cli.exe` if needed).
+2. Delete everything matching `%USERPROFILE%\.local\state\panacode\service*.json`.
+3. Install the latest release build and relaunch.
+
+r3 fixes a mismatch where the app looked for `service.json` while the bundled CLI wrote `service-<channel>.json`.
 
 Build from the panacode repo (Linux host needs `wine` + `wine32`):
 
