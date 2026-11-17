@@ -53,8 +53,22 @@ export function ConnectPanacodePage({
   const [error, setError] = useState("");
   const [doneUrl, setDoneUrl] = useState("");
   const [bootError, setBootError] = useState("");
+  const [returning, setReturning] = useState(false);
 
   const returnPurchase = useMemo(() => purchaseHref(state, redirectUri), [state, redirectUri]);
+
+  /** Top-level navigate to the desktop loopback so Panacode can finish the exchange. */
+  const openDesktop = useCallback((url: string) => {
+    setDoneUrl(url);
+    setReturning(true);
+    // Prefer replace so Back does not replay complete. CSP must not upgrade http→https
+    // (see next.config.ts) or this navigation never reaches the local listener.
+    try {
+      window.location.replace(url);
+    } catch {
+      window.location.href = url;
+    }
+  }, []);
 
   const refreshStatus = useCallback(async () => {
     const next = await api<ConnectStatus>(`connect/panacode/status?state=${encodeURIComponent(state)}`);
@@ -105,6 +119,20 @@ export function ConnectPanacodePage({
     return () => clearInterval(timer);
   }, [data, doneUrl, refreshStatus]);
 
+  // If navigation to loopback was blocked, keep retrying while this tab stays open.
+  useEffect(() => {
+    if (!doneUrl || !returning) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        window.location.replace(doneUrl);
+      } catch {
+        window.location.href = doneUrl;
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [doneUrl, returning]);
+
   const onAuthed = async (payload: AppData) => {
     setData(payload);
     setNeedsAuth(false);
@@ -126,9 +154,7 @@ export function ConnectPanacodePage({
         throw new Error("سقف بودجه معتبر وارد کنید.");
       }
       const result = await api<{ redirectUrl: string }>("connect/panacode/complete", { body });
-      setDoneUrl(result.redirectUrl);
-      // Navigate to desktop loopback — CSP allows top-level navigation.
-      window.location.assign(result.redirectUrl);
+      openDesktop(result.redirectUrl);
     } catch (e) {
       const failure = e as ApiFailure;
       setError(failure.message);
@@ -234,8 +260,14 @@ export function ConnectPanacodePage({
     )}
 
     {doneUrl && (
-      <Notice tone="success" title="در حال بازگشت…">
-        اگر خودکار برنگشتید، <a href={doneUrl}>این لینک را باز کنید</a>.
+      <Notice tone="success" title="کلید ساخته شد — در حال بازگشت به Panacode">
+        مرورگر باید همین الان برنامهٔ دسکتاپ را باز کند. اگر باز نشد،
+        {" "}
+        <a href={doneUrl} onClick={(e) => { e.preventDefault(); openDesktop(doneUrl); }}>
+          این لینک را بزنید
+        </a>
+        {" "}
+        و پنجرهٔ Panacode را جلو بیاورید.
       </Notice>
     )}
   </Shell>;

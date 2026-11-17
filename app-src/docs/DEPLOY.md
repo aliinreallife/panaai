@@ -14,19 +14,19 @@ Read the "Before you deploy" box first.
 
 ## 1. Run locally
 
-**You need:** Node.js 20 or newer (22 recommended), and PostgreSQL 14 or newer. You can install Postgres locally, run it in Docker, or use a free Neon database.
+**You need:** Node.js 20 or newer (22 recommended), and Docker (for the bundled local Postgres). Neon is optional — only if you prefer a hosted DB.
 
 ```bash
 # 1. Get the code (unzip panaai-source.zip, then:)
 cd app-src
 npm install
 
-# 2. Start a database (pick one)
-docker run -d --name panaai-db -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=app_db postgres:16
-#   ...or paste a Neon connection string into .env (see section 2)
+# 2. Start the app's own local Postgres (docker-compose.yml)
+docker compose up -d db
+#   DATABASE_URL in .env.example already targets this container.
 
 # 3. Configure
-cp .env.example .env          # edit DATABASE_URL if yours differs
+cp .env.example .env
 # optional but recommended:
 echo "RECEIPT_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
 
@@ -150,17 +150,21 @@ This is the supported non-Vercel path: Node + Postgres on one machine (or Postgr
 
 **You need:** a Linux VPS, Node.js 20+ (22 recommended), PostgreSQL 14+, a domain pointed at the VPS, and ports 80/443 open.
 
-### 3.1 Database
+### 3.1 Local database (default)
+
+Use the compose file shipped with the app — no Neon/Vercel DB required:
 
 ```bash
-# Example: Postgres in Docker on the same host
-docker run -d --name panaai-db --restart unless-stopped \
-  -e POSTGRES_PASSWORD=CHANGE_ME -e POSTGRES_DB=app_db \
-  -v panaai-pg:/var/lib/postgresql/data -p 127.0.0.1:5432:5432 \
-  postgres:16
+cd /opt/panaai/app-src
+docker compose up -d db
+# waits until healthy; data persists in volume `panaai_pg_data`
 ```
 
-Or install Postgres from your distro and create a database/user. Prefer binding Postgres to localhost only.
+`.env.example` already has:
+
+`DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/app_db`
+
+Change the password in both compose and `.env` before any public deploy. Binding stays on `127.0.0.1` only.
 
 ### 3.2 App
 
