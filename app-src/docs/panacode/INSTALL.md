@@ -14,6 +14,8 @@ Artifacts live in the panacode repo `release/` (CLI) and `release/desktop/` (Win
 
 Unsigned builds may trigger SmartScreen — More info → Run anyway.
 
+If a previous build stuck on the loading screen: quit Panacode, delete `%USERPROFILE%\.local\state\panacode\service.json` (and any `service-*.json` next to it), then reinstall/relaunch.
+
 Build from the panacode repo (Linux host needs `wine` + `wine32`):
 
 ```bash
