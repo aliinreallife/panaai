@@ -1,0 +1,11 @@
+--- a/packages/core/src/provider.ts
++++ b/packages/core/src/provider.ts
+@@ -147,6 +147,8 @@ const builtins = new Map<string, () => Promise<unknown>>([
+     "@opencode/ai/providers/openai-compatible-responses",
+     () => import("@opencode/ai/providers/openai-compatible-responses"),
+   ],
++  // Panacode product provider — must stay in builtins so Bun-compiled CLI can load it.
++  ["@opencode/ai/providers/panaai", () => import("@opencode/ai/providers/panaai")],
+   ["@opencode/ai/providers/opencode/decisions", () => import("@opencode/ai/providers/opencode/decisions")],
+   ["@opencode/ai/providers/openrouter", () => import("@opencode/ai/providers/openrouter")],
+   ["@opencode/ai/providers/openrouter/decisions", () => import("@opencode/ai/providers/openrouter/decisions")],
