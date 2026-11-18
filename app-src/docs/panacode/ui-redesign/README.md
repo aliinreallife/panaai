@@ -6,7 +6,7 @@ This directory ships the Panacode desktop UI redesign that was implemented again
 
 The cloud agent environment can **read** `arashmakkyy/panacode` but cannot **push** branches to it (`permissions.push: false`). Deliverables are therefore exported as applyable patches for a maintainer with write access to the Panacode fork.
 
-Local implementation also remains on the agent VM at `/workspace/panacode` on branch `cursor/panacode-ui-redesign-58f9` (commits `013e9c250` … `0e555403e`).
+Local implementation also remains on the agent VM at `/workspace/panacode` on branch `cursor/panacode-ui-redesign-58f9` (commits `013e9c250` … `9714016eb`).
 
 ## Contents
 
@@ -38,6 +38,7 @@ git push -u origin cursor/panacode-ui-redesign-58f9
 1. Adds `@panacode/ui` (`packages/panacode-ui`) — tokens, Switch, primitives, eight feature shells, adapters, Phase 2 `[data-brand="panacode"]` shell CSS, ownership check, `panacode` theme JSON.
 2. Wires the app — default theme Panacode, brand mark, MCP settings panel adapter, permission dock → Agent Approvals.
 3. Adds `panacode-docs/UPSTREAM-MERGE.md`.
+4. Project Settings › Extensions › MCPs uses the same `PanacodeMcpPanel` adapter.
 
 ## Verification already run in the agent VM
 
