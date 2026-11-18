@@ -1,0 +1,24 @@
+From 0e555403e0db51a58b303478c6235679e5dd8aa2 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 18 Nov 2026 06:55:05 +0000
+Subject: [PATCH 4/4] docs(panacode): record redesign tip SHA in UPSTREAM-MERGE
+
+---
+ panacode-docs/UPSTREAM-MERGE.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/panacode-docs/UPSTREAM-MERGE.md b/panacode-docs/UPSTREAM-MERGE.md
+index 3ce3ae0f3..4d7da17ba 100644
+--- a/panacode-docs/UPSTREAM-MERGE.md
++++ b/panacode-docs/UPSTREAM-MERGE.md
+@@ -16,6 +16,7 @@ Read this **before** editing UI surfaces or running an upstream merge.
+ | Panacode working branch for this redesign | `cursor/panacode-ui-redesign-58f9` |
+ | Recommended stable Panacode branch | `master` (fork default) / future `panacode/main` |
+ | Baseline Panacode commit (pre-redesign tip) | `5c198b87a7adcc6f237d072be3d651c8e1433217` (`fix(cli): embed panaai provider in Bun builtins`) |
++| Current Panacode redesign tip | `05fa01cca` on `cursor/panacode-ui-redesign-58f9` (update after each push) |
+ | Baseline date (UTC) | 2026-11-17 |
+ | Recorded upstream tip at redesign time | `a0fdbf9b91ed2cf8bfd778ccec340285403eddc2` on `upstream/dev` |
+ | Toolchain | Bun `1.4.4` (root `packageManager`), SolidJS via workspace catalog, Electron desktop in `packages/desktop` |
+-- 
+2.43.0
+
