@@ -1,0 +1,3317 @@
+From 013e9c250b2f68aa8d707d9d4145193b0452b360 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 18 Nov 2026 06:55:00 +0000
+Subject: [PATCH 1/5] feat(panacode-ui): add SolidJS design system and Panacode
+ theme
+
+Introduce @panacode/ui with Arc tokens, canonical Switch, shared
+primitives, eight feature shells, presentation adapters, Phase 2 shell
+CSS overlay, ownership check, and the panacode desktop theme.
+---
+ .gitignore                                    |   1 +
+ bun.lock                                      | 100 ++--
+ package.json                                  |   3 +-
+ packages/panacode-ui/README.md                |  12 +
+ packages/panacode-ui/package.json             |  51 ++
+ .../src/adapters/agent-approvals.ts           |  24 +
+ .../src/adapters/agent-orchestrator.ts        |  38 ++
+ .../panacode-ui/src/adapters/agent-run.ts     |  21 +
+ packages/panacode-ui/src/adapters/ai-chat.ts  |  24 +
+ .../panacode-ui/src/adapters/ai-composer.ts   |  13 +
+ .../src/adapters/code-suggestion.ts           |  21 +
+ packages/panacode-ui/src/adapters/index.ts    |   8 +
+ .../src/adapters/mcp-servers.test.ts          |  40 ++
+ .../panacode-ui/src/adapters/mcp-servers.ts   |  20 +
+ .../panacode-ui/src/adapters/tool-call.ts     |  18 +
+ packages/panacode-ui/src/components/.gitkeep  |   0
+ packages/panacode-ui/src/css.d.ts             |   1 +
+ .../agent-approvals/agent-approvals.css       |  31 ++
+ .../src/features/agent-approvals/index.tsx    |  52 ++
+ .../agent-orchestrator/agent-orchestrator.css |  29 +
+ .../src/features/agent-orchestrator/index.tsx |  33 ++
+ .../src/features/agent-run/agent-run.css      |  48 ++
+ .../src/features/agent-run/index.tsx          |  42 ++
+ .../src/features/ai-chat/ai-chat.css          |  62 +++
+ .../src/features/ai-chat/index.tsx            |  40 ++
+ .../src/features/ai-composer/ai-composer.css  |  37 ++
+ .../src/features/ai-composer/index.tsx        |  66 +++
+ .../code-suggestion/code-suggestion.css       |  43 ++
+ .../src/features/code-suggestion/index.tsx    |  67 +++
+ .../src/features/mcp-servers/index.tsx        |  99 ++++
+ .../src/features/mcp-servers/mcp-servers.css  |  65 +++
+ .../src/features/tool-call/index.tsx          |  45 ++
+ .../src/features/tool-call/tool-call.css      |  41 ++
+ packages/panacode-ui/src/icons/.gitkeep       |   0
+ packages/panacode-ui/src/index.ts             |  15 +
+ packages/panacode-ui/src/motion/tokens.ts     |  16 +
+ packages/panacode-ui/src/primitives/badge.css |  31 ++
+ packages/panacode-ui/src/primitives/badge.tsx |  26 +
+ .../panacode-ui/src/primitives/button.css     |  68 +++
+ .../panacode-ui/src/primitives/button.tsx     |  36 ++
+ packages/panacode-ui/src/primitives/input.css |  29 +
+ packages/panacode-ui/src/primitives/input.tsx |  19 +
+ .../src/primitives/segmented-control.css      |  27 +
+ .../src/primitives/segmented-control.tsx      |  43 ++
+ .../panacode-ui/src/primitives/switch.css     | 114 ++++
+ .../panacode-ui/src/primitives/switch.tsx     |  44 ++
+ packages/panacode-ui/src/styles/index.css     |  15 +
+ packages/panacode-ui/src/styles/shell.css     | 188 +++++++
+ packages/panacode-ui/src/theme/index.ts       |   8 +
+ packages/panacode-ui/src/theme/tokens.css     | 216 ++++++++
+ packages/panacode-ui/src/tokens/.gitkeep      |   0
+ packages/panacode-ui/tsconfig.json            |  20 +
+ packages/ui/src/theme/context.tsx             |   1 +
+ packages/ui/src/theme/themes/panacode.json    | 509 ++++++++++++++++++
+ script/panacode-ui-ownership-check.ts         |  48 ++
+ 55 files changed, 2628 insertions(+), 40 deletions(-)
+ create mode 100644 packages/panacode-ui/README.md
+ create mode 100644 packages/panacode-ui/package.json
+ create mode 100644 packages/panacode-ui/src/adapters/agent-approvals.ts
+ create mode 100644 packages/panacode-ui/src/adapters/agent-orchestrator.ts
+ create mode 100644 packages/panacode-ui/src/adapters/agent-run.ts
+ create mode 100644 packages/panacode-ui/src/adapters/ai-chat.ts
+ create mode 100644 packages/panacode-ui/src/adapters/ai-composer.ts
+ create mode 100644 packages/panacode-ui/src/adapters/code-suggestion.ts
+ create mode 100644 packages/panacode-ui/src/adapters/index.ts
+ create mode 100644 packages/panacode-ui/src/adapters/mcp-servers.test.ts
+ create mode 100644 packages/panacode-ui/src/adapters/mcp-servers.ts
+ create mode 100644 packages/panacode-ui/src/adapters/tool-call.ts
+ create mode 100644 packages/panacode-ui/src/components/.gitkeep
+ create mode 100644 packages/panacode-ui/src/css.d.ts
+ create mode 100644 packages/panacode-ui/src/features/agent-approvals/agent-approvals.css
+ create mode 100644 packages/panacode-ui/src/features/agent-approvals/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/agent-orchestrator/agent-orchestrator.css
+ create mode 100644 packages/panacode-ui/src/features/agent-orchestrator/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/agent-run/agent-run.css
+ create mode 100644 packages/panacode-ui/src/features/agent-run/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/ai-chat/ai-chat.css
+ create mode 100644 packages/panacode-ui/src/features/ai-chat/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/ai-composer/ai-composer.css
+ create mode 100644 packages/panacode-ui/src/features/ai-composer/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/code-suggestion/code-suggestion.css
+ create mode 100644 packages/panacode-ui/src/features/code-suggestion/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/mcp-servers/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/mcp-servers/mcp-servers.css
+ create mode 100644 packages/panacode-ui/src/features/tool-call/index.tsx
+ create mode 100644 packages/panacode-ui/src/features/tool-call/tool-call.css
+ create mode 100644 packages/panacode-ui/src/icons/.gitkeep
+ create mode 100644 packages/panacode-ui/src/index.ts
+ create mode 100644 packages/panacode-ui/src/motion/tokens.ts
+ create mode 100644 packages/panacode-ui/src/primitives/badge.css
+ create mode 100644 packages/panacode-ui/src/primitives/badge.tsx
+ create mode 100644 packages/panacode-ui/src/primitives/button.css
+ create mode 100644 packages/panacode-ui/src/primitives/button.tsx
+ create mode 100644 packages/panacode-ui/src/primitives/input.css
+ create mode 100644 packages/panacode-ui/src/primitives/input.tsx
+ create mode 100644 packages/panacode-ui/src/primitives/segmented-control.css
+ create mode 100644 packages/panacode-ui/src/primitives/segmented-control.tsx
+ create mode 100644 packages/panacode-ui/src/primitives/switch.css
+ create mode 100644 packages/panacode-ui/src/primitives/switch.tsx
+ create mode 100644 packages/panacode-ui/src/styles/index.css
+ create mode 100644 packages/panacode-ui/src/styles/shell.css
+ create mode 100644 packages/panacode-ui/src/theme/index.ts
+ create mode 100644 packages/panacode-ui/src/theme/tokens.css
+ create mode 100644 packages/panacode-ui/src/tokens/.gitkeep
+ create mode 100644 packages/panacode-ui/tsconfig.json
+ create mode 100644 packages/ui/src/theme/themes/panacode.json
+ create mode 100644 script/panacode-ui-ownership-check.ts
+
+diff --git a/.gitignore b/.gitignore
+index fd15b7a67..d4eb82b3e 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -45,3 +45,4 @@ legal-drafts-private/
+ !/release/desktop/
+ /release/desktop/*
+ !/release/desktop/INSTALL.md
++.panacode-ref/
+diff --git a/bun.lock b/bun.lock
+index d1c25b643..ad8c49cd0 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -66,6 +66,7 @@
+         "@opencode/session-ui": "workspace:*",
+         "@opencode/ui": "workspace:*",
+         "@opencode/util": "workspace:*",
++        "@panacode/ui": "workspace:*",
+         "@pierre/highlights": "catalog:",
+         "@pierre/trees": "1.0.0-beta.6",
+         "@sentry/solid": "catalog:",
+@@ -339,7 +340,7 @@
+       },
+     },
+     "packages/desktop": {
+-      "name": "@opencode/desktop",
++      "name": "panacode-desktop",
+       "version": "2.3.0",
+       "dependencies": {
+         "@zip.js/zip.js": "2.7.62",
+@@ -502,6 +503,23 @@
+         "typescript": "catalog:",
+       },
+     },
++    "packages/panacode-ui": {
++      "name": "@panacode/ui",
++      "version": "0.1.0",
++      "dependencies": {
++        "@kobalte/core": "catalog:",
++        "@opencode/ui": "workspace:*",
++      },
++      "devDependencies": {
++        "@tsconfig/node22": "catalog:",
++        "@types/bun": "catalog:",
++        "solid-js": "catalog:",
++        "typescript": "catalog:",
++      },
++      "peerDependencies": {
++        "solid-js": "^1.9.8",
++      },
++    },
+     "packages/patchmark": {
+       "name": "@opencode/patchmark",
+       "version": "2.3.0",
+@@ -990,8 +1008,8 @@
+     "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
+     "@modelcontextprotocol/client@2.4.0": "patches/@modelcontextprotocol%2Fclient@2.4.0.patch",
+     "@tanstack/virtual-core@3.17.8": "patches/@tanstack%2Fvirtual-core@3.17.8.patch",
+-    "@brendonovich/vite-plugin-opencode@0.1.3": "patches/@brendonovich%2Fvite-plugin-opencode@0.1.3.patch",
+     "electron-updater@6.8.9": "patches/electron-updater@6.8.9.patch",
++    "@brendonovich/vite-plugin-opencode@0.1.3": "patches/@brendonovich%2Fvite-plugin-opencode@0.1.3.patch",
+     "@kobalte/core@0.13.13": "patches/@kobalte%2Fcore@0.13.13.patch",
+     "pacote@21.5.1": "patches/pacote@21.5.1.patch",
+     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
+@@ -1452,7 +1470,7 @@
+ 
+     "@electron/fuses": ["@electron/fuses@1.8.0", "", { "dependencies": { "chalk": "^4.1.1", "fs-extra": "^9.0.1", "minimist": "^1.2.5" }, "bin": { "electron-fuses": "dist/bin.js" } }, "sha512-zx0EIq78WlY/lBb1uXlziZmDZI4ubcCXIMJ4uGjXzZW0nS19TjSPeXPAjzzTmKQlJUZm0SbmZhPKP7tuQ1SsEw=="],
+ 
+-    "@electron/get": ["@electron/get@3.1.0", "", { "dependencies": { "debug": "^4.1.1", "env-paths": "^2.2.0", "fs-extra": "^8.1.0", "got": "^11.8.5", "progress": "^2.0.3", "semver": "^6.2.0", "sumchecker": "^3.0.1" }, "optionalDependencies": { "global-agent": "^3.0.0" } }, "sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ=="],
++    "@electron/get": ["@electron/get@5.1.0", "", { "dependencies": { "debug": "^4.1.1", "env-paths": "^3.0.0", "graceful-fs": "^4.2.11", "progress": "^2.0.3", "semver": "^7.6.3", "sumchecker": "^3.0.1" }, "optionalDependencies": { "undici": "^7.24.4" } }, "sha512-3kSBtG8ObcTVfXanm5vVJ6UnBLEVmVsRk1M+vGqCuMBV+XLCbJYuWQful+yIy0GQDsSlK0kHEriEHn7SPk4EnA=="],
+ 
+     "@electron/notarize": ["@electron/notarize@2.5.0", "", { "dependencies": { "debug": "^4.1.1", "fs-extra": "^9.0.1", "promise-retry": "^2.0.1" } }, "sha512-jNT8nwH1f9X5GEITXaQ8IF/KdskvIkOFfB2CvwumsveVidzpSc+mvhhTMdAGSYF3O+Nq49lJ7y+ssODRXu06+A=="],
+ 
+@@ -1804,8 +1822,6 @@
+ 
+     "@opencode/data-server": ["@opencode/data-server@workspace:packages/data/server"],
+ 
+-    "@opencode/desktop": ["@opencode/desktop@workspace:packages/desktop"],
+-
+     "@opencode/files": ["@opencode/files@workspace:services/files"],
+ 
+     "@opencode/gui-plugins": ["@opencode/gui-plugins@workspace:packages/gui-plugins"],
+@@ -2028,6 +2044,8 @@
+ 
+     "@pagefind/windows-x64": ["@pagefind/windows-x64@1.5.2", "", { "os": "win32", "cpu": "x64" }, "sha512-Fa2Iyw7kaDRzGMfNYNUXNW2zbL5FQVDgSOcbDHdzBrDEdpqOqg8TcZ68F22ol6NJ9IGzvUdmeyZypLW5dyhqsg=="],
+ 
++    "@panacode/ui": ["@panacode/ui@workspace:packages/panacode-ui"],
++
+     "@parcel/watcher": ["@parcel/watcher@2.5.1", "", { "dependencies": { "detect-libc": "^1.0.3", "is-glob": "^4.0.3", "micromatch": "^4.0.5", "node-addon-api": "^7.0.0" }, "optionalDependencies": { "@parcel/watcher-android-arm64": "2.5.1", "@parcel/watcher-darwin-arm64": "2.5.1", "@parcel/watcher-darwin-x64": "2.5.1", "@parcel/watcher-freebsd-x64": "2.5.1", "@parcel/watcher-linux-arm-glibc": "2.5.1", "@parcel/watcher-linux-arm-musl": "2.5.1", "@parcel/watcher-linux-arm64-glibc": "2.5.1", "@parcel/watcher-linux-arm64-musl": "2.5.1", "@parcel/watcher-linux-x64-glibc": "2.5.1", "@parcel/watcher-linux-x64-musl": "2.5.1", "@parcel/watcher-win32-arm64": "2.5.1", "@parcel/watcher-win32-ia32": "2.5.1", "@parcel/watcher-win32-x64": "2.5.1" } }, "sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg=="],
+ 
+     "@parcel/watcher-android-arm64": ["@parcel/watcher-android-arm64@2.5.1", "", { "os": "android", "cpu": "arm64" }, "sha512-KF8+j9nNbUN8vzOFDpRMsaKBHZ/mcjEjMToVMJOhTozkDonQFFrRcfdLWn6yWKCmJKmdVxSgHiYvTCef4/qcBA=="],
+@@ -2274,7 +2292,7 @@
+ 
+     "@silvia-odwyer/photon-node": ["@silvia-odwyer/photon-node@0.3.4", "", {}, "sha512-bnly4BKB3KDTFxrUIcgCLbaeVVS8lrAkri1pEzskpmxu9MdfGQTy8b8EgcD83ywD3RPMsIulY8xJH5Awa+t9fA=="],
+ 
+-    "@sindresorhus/is": ["@sindresorhus/is@4.6.0", "", {}, "sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw=="],
++    "@sindresorhus/is": ["@sindresorhus/is@7.2.0", "", {}, "sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw=="],
+ 
+     "@smithy/core": ["@smithy/core@3.33.2", "", { "dependencies": { "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-CUGXpnPkVdjUCbix+83sWLW9VFgQOm44MDOx/ihITJMAnOZKvL8YYIc7DR9pP/tZ8CIRvMiON/TucvygqbHO3w=="],
+ 
+@@ -2728,7 +2746,7 @@
+ 
+     "cf": ["cf@1.0.0-beta.12", "", { "dependencies": { "@cloudflare/build-output-utils": "0.8.5", "@cloudflare/codemods": "0.4.0", "@cloudflare/config": "0.23.0", "@cloudflare/runtime-types": "0.1.7", "blake3-wasm": "2.1.5", "miniflare": "5.20260930.0-alpha", "minisearch": "7.2.0" }, "bin": { "cf": "./bin/cf", "cloudflare": "./bin/cf" } }, "sha512-tyQ+Jpnw+4NDwDtl7ZNteXBm7N0TeJ6gYww79kkabpcYoCEXkUUpmt9BlDUKH8ub17tjAeiuyqa9NQzH0vp2Aw=="],
+ 
+-    "chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
++    "chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
+ 
+     "character-entities": ["character-entities@2.0.2", "", {}, "sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ=="],
+ 
+@@ -2746,7 +2764,7 @@
+ 
+     "chromium-pickle-js": ["chromium-pickle-js@0.2.0", "", {}, "sha512-1R5Fho+jBq0DDydt+/vHWj5KJNJCKdARKOCwZUen84I5BreWoLqRLANH1U87eJy1tiASPtMnGqJJq0ZsLoRPOw=="],
+ 
+-    "ci-info": ["ci-info@4.3.1", "", {}, "sha512-Wdy2Igu8OcBpI2pZePZ5oWjPC38tmDVx5WKUXKwlLYkA0ozo85sLsLvkBbBn/sZaSCMFOGZJ14fvW9t5/d7kdA=="],
++    "ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
+ 
+     "cjs-module-lexer": ["cjs-module-lexer@2.2.1", "", {}, "sha512-Ca8swihM+/4yKecYHY52kgJd300hi2lADU/a1RxNTRe+RJ9jvqQlESpbz9DnG9mowez8qwXHB8qYdIUw9e+F5Q=="],
+ 
+@@ -2982,7 +3000,7 @@
+ 
+     "entities": ["entities@7.0.1", "", {}, "sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA=="],
+ 
+-    "env-paths": ["env-paths@2.2.1", "", {}, "sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A=="],
++    "env-paths": ["env-paths@3.0.0", "", {}, "sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A=="],
+ 
+     "env-runner": ["env-runner@0.2.3", "", { "dependencies": { "crossws": "^0.4.12", "exsolve": "^1.1.1", "httpxy": "^0.5.5", "srvx": "^1.0.5" }, "bin": { "env-runner": "./dist/cli.mjs" } }, "sha512-S8EFBKyznRwPVwayK187cYjvnpgC92xy+q0BIF++V965pfjMVVRbQ/HoTYGA/1EHmZ7E68k6Heq+4WnvVhOL5w=="],
+ 
+@@ -3220,7 +3238,7 @@
+ 
+     "hookable": ["hookable@6.1.2", "", {}, "sha512-+abwxtiEA52GCVIsQqut3S/uKTbUwYIp4Pe/vv+6py5XiXBCqMZHg6pA6Y5qhgLSEys0/cYuPbO0z1QFj5ZCmg=="],
+ 
+-    "hosted-git-info": ["hosted-git-info@4.1.0", "", { "dependencies": { "lru-cache": "^6.0.0" } }, "sha512-kyCuEOWjJqZuDbRHzL8V93NzQhwIB71oFWSyzVo+KPZI+pnQPPxucdkrOZvkLRnrf5URsQM+IJ09Dw29cRALIA=="],
++    "hosted-git-info": ["hosted-git-info@9.0.3", "", { "dependencies": { "lru-cache": "^11.1.0" } }, "sha512-Hc+ghLoSt6QaYZUv0WBiIvmMDZuZZ7oaDvdH8MbfOO4lOsxdXLEvuC6ePoGs9H1X9oCLyq6+NVN0MKqD+ydxyg=="],
+ 
+     "html-entities": ["html-entities@2.3.3", "", {}, "sha512-DV5Ln36z34NNTDgnz0EWGBLZENelNAtkiFA4kyNOG2tDI6Mz1uSWiq1wAKdyjnJwyDiDO7Fa2SO1CTxPXL8VxA=="],
+ 
+@@ -3778,6 +3796,8 @@
+ 
+     "pako": ["pako@0.2.9", "", {}, "sha512-NUcwaKxUxWrZLpDG+z/xZaCgQITkA/Dv4V/T6bw7VON6l1Xz/VnrBqrYjZQ12TamKHzITTfOEIYUj48y2KXImA=="],
+ 
++    "panacode-desktop": ["panacode-desktop@workspace:packages/desktop"],
++
+     "parse-conflict-json": ["parse-conflict-json@5.0.1", "", { "dependencies": { "json-parse-even-better-errors": "^5.0.0", "just-diff": "^6.0.0", "just-diff-apply": "^5.2.0" } }, "sha512-ZHEmNKMq1wyJXNwLxyHnluPfRAFSIliBvbK/UiOceROt4Xh9Pz0fq49NytIaeaCUf5VR86hwQ/34FCcNU5/LKQ=="],
+ 
+     "parse-css-color": ["parse-css-color@0.2.1", "", { "dependencies": { "color-name": "^1.1.4", "hex-rgb": "^4.1.0" } }, "sha512-bwS/GGIFV3b6KS4uwpzCFj4w297Yl3uqnSgIPsoQkx7GMLROXfMnWvxfNkL0oh8HVhZA4hvJoEoEIqonfJ3BWg=="],
+@@ -4498,11 +4518,11 @@
+ 
+     "@electron/asar/minimatch": ["minimatch@3.1.5", "", { "dependencies": { "brace-expansion": "^1.1.7" } }, "sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w=="],
+ 
+-    "@electron/fuses/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ=="],
++    "@electron/fuses/chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
+ 
+-    "@electron/get/fs-extra": ["fs-extra@8.1.0", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^4.0.0", "universalify": "^0.1.0" } }, "sha512-yhlQgA6mnOJUKOsRUFsgJdQCvkKhcz8tlZG5HBQfReYZy46OwLcY+Zia0mtdHsOo9y/hP+CxMN0TU9QxoOtG4g=="],
++    "@electron/fuses/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ=="],
+ 
+-    "@electron/get/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
++    "@electron/get/undici": ["undici@7.30.1", "", {}, "sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg=="],
+ 
+     "@electron/notarize/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ=="],
+ 
+@@ -4526,12 +4546,6 @@
+ 
+     "@modelcontextprotocol/sdk/jose": ["jose@6.2.9", "", {}, "sha512-XrchZOFZUl/T3vTwRe8XK+cJrGtMF4th1ARnDfwbBXFKThGhlsxEE4Zu03AD/bjJSt/9jT/mxrOCkJWOg77aPA=="],
+ 
+-    "@npmcli/arborist/hosted-git-info": ["hosted-git-info@9.0.3", "", { "dependencies": { "lru-cache": "^11.1.0" } }, "sha512-Hc+ghLoSt6QaYZUv0WBiIvmMDZuZZ7oaDvdH8MbfOO4lOsxdXLEvuC6ePoGs9H1X9oCLyq6+NVN0MKqD+ydxyg=="],
+-
+-    "@npmcli/config/ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
+-
+-    "@npmcli/package-json/hosted-git-info": ["hosted-git-info@9.0.3", "", { "dependencies": { "lru-cache": "^11.1.0" } }, "sha512-Hc+ghLoSt6QaYZUv0WBiIvmMDZuZZ7oaDvdH8MbfOO4lOsxdXLEvuC6ePoGs9H1X9oCLyq6+NVN0MKqD+ydxyg=="],
+-
+     "@octokit/auth-oauth-app/@octokit/types": ["@octokit/types@17.0.0", "", { "dependencies": { "@octokit/openapi-types": "^28.0.0" } }, "sha512-ByP1v7YL5SMveFPP7+sj0/ZuWCOOg/Chs4NafOMpq6WNIM/hdGY0S7C0TCGDBWu1aGmOxmUIhMx3cO+IdwYZ1Q=="],
+ 
+     "@octokit/auth-oauth-device/@octokit/types": ["@octokit/types@17.0.0", "", { "dependencies": { "@octokit/openapi-types": "^28.0.0" } }, "sha512-ByP1v7YL5SMveFPP7+sj0/ZuWCOOg/Chs4NafOMpq6WNIM/hdGY0S7C0TCGDBWu1aGmOxmUIhMx3cO+IdwYZ1Q=="],
+@@ -4616,8 +4630,6 @@
+ 
+     "@pierre/diffs/diff": ["diff@9.0.0", "", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
+ 
+-    "@poppinss/dumper/@sindresorhus/is": ["@sindresorhus/is@7.2.0", "", {}, "sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw=="],
+-
+     "@poppinss/dumper/supports-color": ["supports-color@10.2.2", "", {}, "sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g=="],
+ 
+     "@puppeteer/browsers/yargs": ["yargs@18.1.0", "", { "dependencies": { "cliui": "^9.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "string-width": "^8.2.1", "y18n": "^5.0.5", "yargs-parser": "^22.0.0" } }, "sha512-2rAgRKu54VsHkqI0/tYkmluGXHD4KW7yZoycuqDQ15QOTnc2VVfy0nN/1eMhnQLO00A+dwtK20xuCnc1YGeUyg=="],
+@@ -4666,6 +4678,12 @@
+ 
+     "@types/three/fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
+ 
++    "app-builder-lib/@electron/get": ["@electron/get@3.1.0", "", { "dependencies": { "debug": "^4.1.1", "env-paths": "^2.2.0", "fs-extra": "^8.1.0", "got": "^11.8.5", "progress": "^2.0.3", "semver": "^6.2.0", "sumchecker": "^3.0.1" }, "optionalDependencies": { "global-agent": "^3.0.0" } }, "sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ=="],
++
++    "app-builder-lib/ci-info": ["ci-info@4.3.1", "", {}, "sha512-Wdy2Igu8OcBpI2pZePZ5oWjPC38tmDVx5WKUXKwlLYkA0ozo85sLsLvkBbBn/sZaSCMFOGZJ14fvW9t5/d7kdA=="],
++
++    "app-builder-lib/hosted-git-info": ["hosted-git-info@4.1.0", "", { "dependencies": { "lru-cache": "^6.0.0" } }, "sha512-kyCuEOWjJqZuDbRHzL8V93NzQhwIB71oFWSyzVo+KPZI+pnQPPxucdkrOZvkLRnrf5URsQM+IJ09Dw29cRALIA=="],
++
+     "app-builder-lib/js-yaml": ["js-yaml@4.3.2", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="],
+ 
+     "app-builder-lib/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
+@@ -4680,6 +4698,8 @@
+ 
+     "body-parser/content-type": ["content-type@2.1.0", "", {}, "sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag=="],
+ 
++    "builder-util/chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
++
+     "builder-util/js-yaml": ["js-yaml@4.3.2", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="],
+ 
+     "chromium-bidi/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+@@ -4702,9 +4722,9 @@
+ 
+     "dom-serializer/entities": ["entities@4.5.0", "", {}, "sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw=="],
+ 
+-    "electron/@electron/get": ["@electron/get@5.1.0", "", { "dependencies": { "debug": "^4.1.1", "env-paths": "^3.0.0", "graceful-fs": "^4.2.11", "progress": "^2.0.3", "semver": "^7.6.3", "sumchecker": "^3.0.1" }, "optionalDependencies": { "undici": "^7.24.4" } }, "sha512-3kSBtG8ObcTVfXanm5vVJ6UnBLEVmVsRk1M+vGqCuMBV+XLCbJYuWQful+yIy0GQDsSlK0kHEriEHn7SPk4EnA=="],
++    "electron-builder/chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
+ 
+-    "electron-builder/ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
++    "electron-publish/chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
+ 
+     "electron-updater/js-yaml": ["js-yaml@4.3.2", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="],
+ 
+@@ -4746,12 +4766,12 @@
+ 
+     "gitlab-ai-provider/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+ 
++    "got/@sindresorhus/is": ["@sindresorhus/is@4.6.0", "", {}, "sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw=="],
++
+     "h3/rou3": ["rou3@1.0.0", "", {}, "sha512-ySeaQkSrua+ut9g+65I7FHqOFBaY8tV0FmccXItoq0q21se32Q3u4YiW7/RqXSosWgYJaaKwRHXy3BST9PeCNQ=="],
+ 
+     "h3/srvx": ["srvx@1.0.6", "", { "bin": { "srvx": "./bin/srvx.mjs" } }, "sha512-QeTKgAhk8OSsfeq60bl3wuVs9PmBftzmk7owBInA/F1YQne+TRw0UcPymNpURldAmx8hfmM2PNNGH/zgo3GpLA=="],
+ 
+-    "hosted-git-info/lru-cache": ["lru-cache@6.0.0", "", { "dependencies": { "yallist": "^4.0.0" } }, "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA=="],
+-
+     "htmlparser2/entities": ["entities@4.5.0", "", {}, "sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw=="],
+ 
+     "is-wsl/is-docker": ["is-docker@2.2.1", "", { "bin": { "is-docker": "cli.js" } }, "sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ=="],
+@@ -4784,9 +4804,9 @@
+ 
+     "nitro/srvx": ["srvx@1.0.6", "", { "bin": { "srvx": "./bin/srvx.mjs" } }, "sha512-QeTKgAhk8OSsfeq60bl3wuVs9PmBftzmk7owBInA/F1YQne+TRw0UcPymNpURldAmx8hfmM2PNNGH/zgo3GpLA=="],
+ 
+-    "node-gyp/undici": ["undici@6.29.1", "", {}, "sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA=="],
++    "node-gyp/env-paths": ["env-paths@2.2.1", "", {}, "sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A=="],
+ 
+-    "npm-package-arg/hosted-git-info": ["hosted-git-info@9.0.3", "", { "dependencies": { "lru-cache": "^11.1.0" } }, "sha512-Hc+ghLoSt6QaYZUv0WBiIvmMDZuZZ7oaDvdH8MbfOO4lOsxdXLEvuC6ePoGs9H1X9oCLyq6+NVN0MKqD+ydxyg=="],
++    "node-gyp/undici": ["undici@6.29.1", "", {}, "sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA=="],
+ 
+     "oxc-parser/@oxc-project/types": ["@oxc-project/types@0.141.0", "", {}, "sha512-S4as7z0j0xQkXcJlyY5ehntwK8/wRkQb9Cyqw+J/N2rkWGQGK0SxD6X6DhQTc7qsxVTBxXbxZtBJh3mr3PtIzQ=="],
+ 
+@@ -4860,8 +4880,6 @@
+ 
+     "unzipper/fs-extra": ["fs-extra@11.3.1", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-eXvGGwZ5CL17ZSwHWd3bbgk7UUpF6IFHtP57NYYakPvHOs8GDgDe5KJI36jIJzDkJ6eJjuzRA8eBQb6SkKue0g=="],
+ 
+-    "vite-plugin-icons-spritesheet/chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
+-
+     "vite-plugin-icons-spritesheet/glob": ["glob@11.1.0", "", { "dependencies": { "foreground-child": "^3.3.1", "jackspeak": "^4.1.1", "minimatch": "^10.1.1", "minipass": "^7.1.2", "package-json-from-dist": "^1.0.0", "path-scurry": "^2.0.0" }, "bin": { "glob": "dist/esm/bin.mjs" } }, "sha512-vuNwKSaKiqm7g0THUBu2x7ckSs3XJLXE+2ssL7/MfTGPLLcrJQ/4Uq1CjPTtO5cCIiRxqvN6Twy1qOwhL0Xjcw=="],
+ 
+     "which-builtin-type/isarray": ["isarray@2.0.5", "", {}, "sha512-xHjhDr3cNBK0BzdUJSPXZntQUx/mwMS5Rw4A7lPJ90XGAO6ISP/ePDNuo0vhqOZU+UD5JoodwCAAoZQd3FeAKw=="],
+@@ -4920,10 +4938,6 @@
+ 
+     "@electron/asar/minimatch/brace-expansion": ["brace-expansion@1.1.21", "", { "dependencies": { "balanced-match": "^1.0.0", "concat-map": "0.0.1" } }, "sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw=="],
+ 
+-    "@electron/get/fs-extra/jsonfile": ["jsonfile@4.0.0", "", { "optionalDependencies": { "graceful-fs": "^4.1.6" } }, "sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg=="],
+-
+-    "@electron/get/fs-extra/universalify": ["universalify@0.1.2", "", {}, "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg=="],
+-
+     "@electron/universal/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="],
+ 
+     "@octokit/auth-oauth-app/@octokit/types/@octokit/openapi-types": ["@octokit/openapi-types@28.0.0", "", {}, "sha512-0rFyLuyHvIj6uuZWuDslxkowFYdPXoNIkeAv4b27dzm2Tf4vGWXnPsMcxs7d65kLdMERgP3wc1AEPlqMz8e1cQ=="],
+@@ -5010,6 +5024,14 @@
+ 
+     "@textjs/app/vite/postcss": ["postcss@8.5.31", "", { "dependencies": { "nanoid": "^3.3.20", "picocolors": "^1.1.1", "source-map-js": "^1.2.2" } }, "sha512-YUbWYCgErwnMAVkjUnYa+KlMBzGpHwiIt/DE7f0G33AuX2LH9UcTk6KgWxd3zRU+pN3u/C+Xl3EnMLM4Hea7Sg=="],
+ 
++    "app-builder-lib/@electron/get/env-paths": ["env-paths@2.2.1", "", {}, "sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A=="],
++
++    "app-builder-lib/@electron/get/fs-extra": ["fs-extra@8.1.0", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^4.0.0", "universalify": "^0.1.0" } }, "sha512-yhlQgA6mnOJUKOsRUFsgJdQCvkKhcz8tlZG5HBQfReYZy46OwLcY+Zia0mtdHsOo9y/hP+CxMN0TU9QxoOtG4g=="],
++
++    "app-builder-lib/@electron/get/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
++
++    "app-builder-lib/hosted-git-info/lru-cache": ["lru-cache@6.0.0", "", { "dependencies": { "yallist": "^4.0.0" } }, "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA=="],
++
+     "app-builder-lib/which/isexe": ["isexe@3.1.5", "", {}, "sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w=="],
+ 
+     "babel-plugin-module-resolver/glob/minimatch": ["minimatch@8.0.7", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, "sha512-V+1uQNdzybxa14e/p00HZnQNNcTjnRJjDxg2V8wtkjFctq4M7hXFws4oekyTP0Jebeq7QYtpFyOeBAjc88zvYg=="],
+@@ -5030,18 +5052,12 @@
+ 
+     "electron-winstaller/fs-extra/universalify": ["universalify@0.1.2", "", {}, "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg=="],
+ 
+-    "electron/@electron/get/env-paths": ["env-paths@3.0.0", "", {}, "sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A=="],
+-
+-    "electron/@electron/get/undici": ["undici@7.30.1", "", {}, "sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg=="],
+-
+     "enquirer/strip-ansi/ansi-regex": ["ansi-regex@5.0.1", "", {}, "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ=="],
+ 
+     "filelist/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="],
+ 
+     "form-data/mime-types/mime-db": ["mime-db@1.52.0", "", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
+ 
+-    "hosted-git-info/lru-cache/yallist": ["yallist@4.0.0", "", {}, "sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A=="],
+-
+     "miniflare/sharp/@img/sharp-darwin-arm64": ["@img/sharp-darwin-arm64@0.35.4", "", { "optionalDependencies": { "@img/sharp-libvips-darwin-arm64": "1.3.3" }, "os": "darwin", "cpu": "arm64" }, "sha512-Uhfl4V4lhP2nbUVF9+hyH1+luj86f1gUFeo8ALYxFoULoU+G87D43BfeMP8XHsk9boxAnCY/bf2EHwhA7MuGsA=="],
+ 
+     "miniflare/sharp/@img/sharp-darwin-x64": ["@img/sharp-darwin-x64@0.35.4", "", { "optionalDependencies": { "@img/sharp-libvips-darwin-x64": "1.3.3" }, "os": "darwin", "cpu": "x64" }, "sha512-hWniXY3bG5qKpkKrAwPe4y+VTPmf086YQAnkxWh7uA1YrlRouWGa0M0Mxj3ZjnXFkv7/TD1bTy9lGUK26vRvWw=="],
+@@ -5362,6 +5378,12 @@
+ 
+     "@textjs/app/vite/postcss/nanoid": ["nanoid@3.3.20", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ=="],
+ 
++    "app-builder-lib/@electron/get/fs-extra/jsonfile": ["jsonfile@4.0.0", "", { "optionalDependencies": { "graceful-fs": "^4.1.6" } }, "sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg=="],
++
++    "app-builder-lib/@electron/get/fs-extra/universalify": ["universalify@0.1.2", "", {}, "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg=="],
++
++    "app-builder-lib/hosted-git-info/lru-cache/yallist": ["yallist@4.0.0", "", {}, "sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A=="],
++
+     "babel-plugin-module-resolver/glob/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="],
+ 
+     "babel-plugin-module-resolver/glob/path-scurry/lru-cache": ["lru-cache@10.4.3", "", {}, "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="],
+diff --git a/package.json b/package.json
+index 64b888d07..94a4bd204 100644
+--- a/package.json
++++ b/package.json
+@@ -32,7 +32,8 @@
+     "prepare": "husky",
+     "random": "echo 'Random script'",
+     "sso": "aws sso login --sso-session=opencode --no-browser",
+-    "test": "echo 'do not run tests from root' && exit 1"
++    "test": "echo 'do not run tests from root' && exit 1",
++    "panacode:ui-ownership": "bun script/panacode-ui-ownership-check.ts"
+   },
+   "workspaces": {
+     "packages": [
+diff --git a/packages/panacode-ui/README.md b/packages/panacode-ui/README.md
+new file mode 100644
+index 000000000..e89c93ff9
+--- /dev/null
++++ b/packages/panacode-ui/README.md
+@@ -0,0 +1,12 @@
++# `@panacode/ui`
++
++Panacode-owned SolidJS design system and presentation adapters for the OpenCode-based desktop app.
++
++- **Primitives** — Switch (Arc MCP reference), Button, Input, SegmentedControl
++- **Features** — AI Chat, AI Composer, Agent Run, Agent Orchestrator, Agent Approvals, Tool Call, Code Suggestion, MCP Servers
++- **Adapters** — map OpenCode domain state → presentation props (no second source of truth)
++- **Styles** — Arc tokens + Phase 2 `[data-brand="panacode"]` shell overlay
++
++See `panacode-docs/UPSTREAM-MERGE.md` for ownership and merge rules.
++
++Do not import the React Arc demos from `.panacode-ref/` into this package.
+diff --git a/packages/panacode-ui/package.json b/packages/panacode-ui/package.json
+new file mode 100644
+index 000000000..8ee2cb253
+--- /dev/null
++++ b/packages/panacode-ui/package.json
+@@ -0,0 +1,51 @@
++{
++  "name": "@panacode/ui",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "license": "MIT",
++  "description": "Panacode-owned SolidJS design system and presentation adapters (upstream-safe overlay on OpenCode).",
++  "sideEffects": ["**/*.css"],
++  "exports": {
++    "./package.json": "./package.json",
++    ".": "./src/index.ts",
++    "./theme": "./src/theme/index.ts",
++    "./theme/tokens.css": "./src/theme/tokens.css",
++    "./styles": "./src/styles/index.css",
++    "./styles/shell.css": "./src/styles/shell.css",
++    "./primitives/switch": "./src/primitives/switch.tsx",
++    "./primitives/button": "./src/primitives/button.tsx",
++    "./primitives/input": "./src/primitives/input.tsx",
++    "./primitives/segmented-control": "./src/primitives/segmented-control.tsx",
++    "./primitives/badge": "./src/primitives/badge.tsx",
++    "./adapters": "./src/adapters/index.ts",
++    "./motion": "./src/motion/tokens.ts",
++    "./features/ai-chat": "./src/features/ai-chat/index.tsx",
++    "./features/ai-composer": "./src/features/ai-composer/index.tsx",
++    "./features/agent-run": "./src/features/agent-run/index.tsx",
++    "./features/agent-orchestrator": "./src/features/agent-orchestrator/index.tsx",
++    "./features/agent-approvals": "./src/features/agent-approvals/index.tsx",
++    "./features/tool-call": "./src/features/tool-call/index.tsx",
++    "./features/code-suggestion": "./src/features/code-suggestion/index.tsx",
++    "./features/mcp-servers": "./src/features/mcp-servers/index.tsx",
++    "./adapters/*": "./src/adapters/*.ts"
++  },
++  "scripts": {
++    "typecheck": "tsc --noEmit",
++    "typecheck:tsc": "tsc --noEmit",
++    "test": "bun test src --only-failures"
++  },
++  "peerDependencies": {
++    "solid-js": "^1.9.8"
++  },
++  "dependencies": {
++    "@kobalte/core": "catalog:",
++    "@opencode/ui": "workspace:*"
++  },
++  "devDependencies": {
++    "@tsconfig/node22": "catalog:",
++    "@types/bun": "catalog:",
++    "solid-js": "catalog:",
++    "typescript": "catalog:"
++  }
++}
+diff --git a/packages/panacode-ui/src/adapters/agent-approvals.ts b/packages/panacode-ui/src/adapters/agent-approvals.ts
+new file mode 100644
+index 000000000..100a9f878
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/agent-approvals.ts
+@@ -0,0 +1,24 @@
++import type { ApprovalRequest } from "../features/agent-approvals"
++import type { JSX } from "solid-js"
++
++/** Maps OpenCode permission requests into Panacode AgentApprovals presentation props. */
++export function toApprovalRequests(
++  requests: readonly {
++    id: string
++    title: string
++    detail?: JSX.Element
++    scope?: string
++  }[],
++): ApprovalRequest[] {
++  return requests.map((request) => ({
++    id: request.id,
++    title: request.title,
++    detail: request.detail,
++    scope: request.scope,
++  }))
++}
++
++/** Normalize once/always/reject into the approval dock's binary approve/reject surface. */
++export function toApprovalDecision(action: "approve" | "reject"): "once" | "reject" {
++  return action === "approve" ? "once" : "reject"
++}
+diff --git a/packages/panacode-ui/src/adapters/agent-orchestrator.ts b/packages/panacode-ui/src/adapters/agent-orchestrator.ts
+new file mode 100644
+index 000000000..75d15a0d6
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/agent-orchestrator.ts
+@@ -0,0 +1,38 @@
++import type { OrchestratorLane } from "../features/agent-orchestrator"
++import type { JSX } from "solid-js"
++
++/** Maps delegated/subagent task rows into Panacode AgentOrchestrator presentation props. */
++export function toOrchestratorLanes(
++  tasks: readonly {
++    id: string
++    title: string
++    status: string
++    body?: JSX.Element
++  }[],
++): OrchestratorLane[] {
++  return tasks.map((task) => ({
++    id: task.id,
++    title: task.title,
++    status: normalizeStatus(task.status),
++    body: task.body,
++  }))
++}
++
++function normalizeStatus(status: string): OrchestratorLane["status"] {
++  switch (status) {
++    case "pending":
++    case "queued":
++    case "idle":
++      return "idle"
++    case "running":
++    case "busy":
++    case "in_progress":
++    case "active":
++      return "active"
++    case "error":
++    case "failed":
++      return "error"
++    default:
++      return "done"
++  }
++}
+diff --git a/packages/panacode-ui/src/adapters/agent-run.ts b/packages/panacode-ui/src/adapters/agent-run.ts
+new file mode 100644
+index 000000000..95e2125d8
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/agent-run.ts
+@@ -0,0 +1,21 @@
++import type { AgentRunStatus } from "../features/agent-run"
++
++export function toAgentRunStatus(status: string | undefined): AgentRunStatus {
++  switch (status) {
++    case "queued":
++    case "pending":
++      return "queued"
++    case "running":
++    case "in_progress":
++    case "busy":
++      return "running"
++    case "error":
++    case "failed":
++      return "failed"
++    case "cancelled":
++    case "aborted":
++      return "cancelled"
++    default:
++      return "completed"
++  }
++}
+diff --git a/packages/panacode-ui/src/adapters/ai-chat.ts b/packages/panacode-ui/src/adapters/ai-chat.ts
+new file mode 100644
+index 000000000..27a79819f
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/ai-chat.ts
+@@ -0,0 +1,24 @@
++import type { ChatMessageView, ChatRole } from "../features/ai-chat"
++import type { JSX } from "solid-js"
++
++/** Maps OpenCode session message summaries into Panacode AiChat presentation props. */
++export function toChatMessageViews(
++  messages: readonly {
++    id: string
++    role: string
++    content: JSX.Element
++    streaming?: boolean
++  }[],
++): ChatMessageView[] {
++  return messages.map((message) => ({
++    id: message.id,
++    role: normalizeRole(message.role),
++    content: message.content,
++    streaming: message.streaming,
++  }))
++}
++
++function normalizeRole(role: string): ChatRole {
++  if (role === "user" || role === "assistant" || role === "system") return role
++  return "assistant"
++}
+diff --git a/packages/panacode-ui/src/adapters/ai-composer.ts b/packages/panacode-ui/src/adapters/ai-composer.ts
+new file mode 100644
+index 000000000..d73d74055
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/ai-composer.ts
+@@ -0,0 +1,13 @@
++/** Presentation helpers for the Panacode composer chrome. Domain submit/stop stays in app controllers. */
++
++export type ComposerMode = "idle" | "streaming" | "disabled"
++
++export function toComposerMode(input: {
++  busy?: boolean
++  streaming?: boolean
++  disabled?: boolean
++}): ComposerMode {
++  if (input.disabled) return "disabled"
++  if (input.busy || input.streaming) return "streaming"
++  return "idle"
++}
+diff --git a/packages/panacode-ui/src/adapters/code-suggestion.ts b/packages/panacode-ui/src/adapters/code-suggestion.ts
+new file mode 100644
+index 000000000..3e59c2ea9
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/code-suggestion.ts
+@@ -0,0 +1,21 @@
++import type { SuggestionHunk, SuggestionMode } from "../features/code-suggestion"
++import type { JSX } from "solid-js"
++
++/** Maps review hunk rows into Panacode CodeSuggestion presentation props. */
++export function toSuggestionHunks(
++  hunks: readonly {
++    id: string
++    path: string
++    body: JSX.Element
++  }[],
++): SuggestionHunk[] {
++  return hunks.map((hunk) => ({
++    id: hunk.id,
++    path: hunk.path,
++    body: hunk.body,
++  }))
++}
++
++export function toSuggestionMode(mode: string | undefined): SuggestionMode {
++  return mode === "split" ? "split" : "unified"
++}
+diff --git a/packages/panacode-ui/src/adapters/index.ts b/packages/panacode-ui/src/adapters/index.ts
+new file mode 100644
+index 000000000..dfb16b743
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/index.ts
+@@ -0,0 +1,8 @@
++export { toMcpServerViews } from "./mcp-servers"
++export { toToolCallStatus } from "./tool-call"
++export { toAgentRunStatus } from "./agent-run"
++export { toChatMessageViews } from "./ai-chat"
++export { toComposerMode } from "./ai-composer"
++export { toApprovalRequests, toApprovalDecision } from "./agent-approvals"
++export { toSuggestionHunks, toSuggestionMode } from "./code-suggestion"
++export { toOrchestratorLanes } from "./agent-orchestrator"
+diff --git a/packages/panacode-ui/src/adapters/mcp-servers.test.ts b/packages/panacode-ui/src/adapters/mcp-servers.test.ts
+new file mode 100644
+index 000000000..ae8539b6f
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/mcp-servers.test.ts
+@@ -0,0 +1,40 @@
++import { describe, expect, test } from "bun:test"
++import { toMcpServerViews } from "./mcp-servers"
++import { toToolCallStatus } from "./tool-call"
++import { toAgentRunStatus } from "./agent-run"
++import { toComposerMode } from "./ai-composer"
++import { toOrchestratorLanes } from "./agent-orchestrator"
++import { toSuggestionMode } from "./code-suggestion"
++import { toApprovalDecision } from "./agent-approvals"
++
++describe("panacode adapters", () => {
++  test("maps MCP server status into presentation views", () => {
++    expect(
++      toMcpServerViews([
++        { name: "fs", status: { status: "connected" } },
++        { name: "broken", status: { status: "failed", error: "timeout" } },
++        { name: "off", status: { status: "disabled" } },
++      ]),
++    ).toEqual([
++      { id: "fs", name: "fs", enabled: true, connected: true, error: undefined },
++      { id: "broken", name: "broken", enabled: true, connected: false, error: "timeout" },
++      { id: "off", name: "off", enabled: false, connected: false, error: undefined },
++    ])
++  })
++
++  test("normalizes tool and agent statuses", () => {
++    expect(toToolCallStatus("in_progress")).toBe("running")
++    expect(toToolCallStatus("failed")).toBe("error")
++    expect(toAgentRunStatus("aborted")).toBe("cancelled")
++    expect(toAgentRunStatus("busy")).toBe("running")
++  })
++
++  test("maps composer, orchestrator, review, and approval helpers", () => {
++    expect(toComposerMode({ streaming: true })).toBe("streaming")
++    expect(toComposerMode({ disabled: true })).toBe("disabled")
++    expect(toOrchestratorLanes([{ id: "1", title: "Sub", status: "busy" }])[0]?.status).toBe("active")
++    expect(toSuggestionMode("split")).toBe("split")
++    expect(toApprovalDecision("approve")).toBe("once")
++    expect(toApprovalDecision("reject")).toBe("reject")
++  })
++})
+diff --git a/packages/panacode-ui/src/adapters/mcp-servers.ts b/packages/panacode-ui/src/adapters/mcp-servers.ts
+new file mode 100644
+index 000000000..648ff6466
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/mcp-servers.ts
+@@ -0,0 +1,20 @@
++import type { McpServerView } from "../features/mcp-servers"
++
++/** Maps OpenCode MCP server list items into Panacode MCP presentation props. */
++export function toMcpServerViews(
++  servers: readonly {
++    name: string
++    status: { status: string; error?: string }
++  }[],
++): McpServerView[] {
++  return servers.map((server) => {
++    const status = server.status.status
++    return {
++      id: server.name,
++      name: server.name,
++      enabled: status !== "disabled",
++      connected: status === "connected",
++      error: status === "failed" ? server.status.error ?? "Connection failed" : undefined,
++    }
++  })
++}
+diff --git a/packages/panacode-ui/src/adapters/tool-call.ts b/packages/panacode-ui/src/adapters/tool-call.ts
+new file mode 100644
+index 000000000..f375a704f
+--- /dev/null
++++ b/packages/panacode-ui/src/adapters/tool-call.ts
+@@ -0,0 +1,18 @@
++import type { ToolCallStatus } from "../features/tool-call"
++
++/** Normalize OpenCode tool part status strings into Panacode ToolCall status. */
++export function toToolCallStatus(status: string | undefined): ToolCallStatus {
++  switch (status) {
++    case "pending":
++    case "queued":
++      return "pending"
++    case "running":
++    case "in_progress":
++      return "running"
++    case "error":
++    case "failed":
++      return "error"
++    default:
++      return "completed"
++  }
++}
+diff --git a/packages/panacode-ui/src/components/.gitkeep b/packages/panacode-ui/src/components/.gitkeep
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/packages/panacode-ui/src/css.d.ts b/packages/panacode-ui/src/css.d.ts
+new file mode 100644
+index 000000000..ef6d741f6
+--- /dev/null
++++ b/packages/panacode-ui/src/css.d.ts
+@@ -0,0 +1 @@
++declare module "*.css" {}
+diff --git a/packages/panacode-ui/src/features/agent-approvals/agent-approvals.css b/packages/panacode-ui/src/features/agent-approvals/agent-approvals.css
+new file mode 100644
+index 000000000..7d7800125
+--- /dev/null
++++ b/packages/panacode-ui/src/features/agent-approvals/agent-approvals.css
+@@ -0,0 +1,31 @@
++[data-component="panacode-agent-approvals"] {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-agent-approvals"] [data-slot="approval"] {
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-panel, 1.625rem);
++  background: var(--surface, oklch(100% 0 0));
++  padding: var(--space-4, 1rem);
++}
++
++[data-component="panacode-agent-approvals"] [data-slot="approval"] header {
++  display: flex;
++  justify-content: space-between;
++  gap: var(--space-2, 0.5rem);
++  margin-bottom: var(--space-2, 0.5rem);
++}
++
++[data-component="panacode-agent-approvals"] [data-slot="approval"] h4 {
++  margin: 0;
++  font-size: var(--text-base, 1rem);
++}
++
++[data-component="panacode-agent-approvals"] [data-slot="approval-actions"] {
++  display: flex;
++  justify-content: flex-end;
++  gap: var(--space-2, 0.5rem);
++  margin-top: var(--space-3, 0.75rem);
++}
+diff --git a/packages/panacode-ui/src/features/agent-approvals/index.tsx b/packages/panacode-ui/src/features/agent-approvals/index.tsx
+new file mode 100644
+index 000000000..4b845f334
+--- /dev/null
++++ b/packages/panacode-ui/src/features/agent-approvals/index.tsx
+@@ -0,0 +1,52 @@
++import { For, Show, type JSX } from "solid-js"
++import { Button } from "../../primitives/button"
++import "./agent-approvals.css"
++
++export type ApprovalRequest = {
++  id: string
++  title: string
++  detail?: JSX.Element
++  scope?: string
++}
++
++export interface AgentApprovalsProps {
++  requests: readonly ApprovalRequest[]
++  onApprove: (id: string) => void
++  onReject: (id: string) => void
++  /** Optional "always allow" — maps to OpenCode permission `always`. */
++  onAlways?: (id: string) => void
++  class?: string
++  labels: { approve: string; reject: string; always?: string }
++}
++
++/** Permission / approval dock — preserve OpenCode authorization semantics in the adapter. */
++export function AgentApprovals(props: AgentApprovalsProps) {
++  return (
++    <div data-component="panacode-agent-approvals" data-panacode-feature="agent-approvals" class={props.class}>
++      <For each={props.requests}>
++        {(request) => (
++          <article data-slot="approval">
++            <header>
++              <h4>{request.title}</h4>
++              <span>{request.scope}</span>
++            </header>
++            <div data-slot="approval-detail">{request.detail}</div>
++            <div data-slot="approval-actions">
++              <Button variant="secondary" size="sm" onClick={() => props.onReject(request.id)}>
++                {props.labels.reject}
++              </Button>
++              <Show when={props.onAlways && props.labels.always}>
++                <Button variant="secondary" size="sm" onClick={() => props.onAlways?.(request.id)}>
++                  {props.labels.always}
++                </Button>
++              </Show>
++              <Button variant="primary" size="sm" onClick={() => props.onApprove(request.id)}>
++                {props.labels.approve}
++              </Button>
++            </div>
++          </article>
++        )}
++      </For>
++    </div>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/agent-orchestrator/agent-orchestrator.css b/packages/panacode-ui/src/features/agent-orchestrator/agent-orchestrator.css
+new file mode 100644
+index 000000000..1601dda7c
+--- /dev/null
++++ b/packages/panacode-ui/src/features/agent-orchestrator/agent-orchestrator.css
+@@ -0,0 +1,29 @@
++[data-component="panacode-agent-orchestrator"] {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-agent-orchestrator"] [data-slot="lane"] {
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-panel, 1.625rem);
++  background: var(--surface, oklch(100% 0 0));
++  padding: var(--space-3, 0.75rem);
++  min-height: 8rem;
++}
++
++[data-component="panacode-agent-orchestrator"] [data-slot="lane"] header {
++  display: flex;
++  justify-content: space-between;
++  gap: var(--space-2, 0.5rem);
++  margin-bottom: var(--space-2, 0.5rem);
++}
++
++[data-component="panacode-agent-orchestrator"] [data-slot="lane"] h4 {
++  margin: 0;
++  font-size: var(--text-sm, 0.875rem);
++}
++
++[data-component="panacode-agent-orchestrator"] [data-slot="lane"][data-status="active"] {
++  box-shadow: inset 0 0 0 1px var(--accent-subtle, oklch(33% 0 0 / 0.1));
++}
+diff --git a/packages/panacode-ui/src/features/agent-orchestrator/index.tsx b/packages/panacode-ui/src/features/agent-orchestrator/index.tsx
+new file mode 100644
+index 000000000..e7d801d93
+--- /dev/null
++++ b/packages/panacode-ui/src/features/agent-orchestrator/index.tsx
+@@ -0,0 +1,33 @@
++import { For, type JSX } from "solid-js"
++import "./agent-orchestrator.css"
++
++export type OrchestratorLane = {
++  id: string
++  title: string
++  status: "idle" | "active" | "done" | "error"
++  body?: JSX.Element
++}
++
++export interface AgentOrchestratorProps {
++  lanes: readonly OrchestratorLane[]
++  class?: string
++}
++
++/** Lane board for delegated / subagent work — bind real task graphs via adapter. */
++export function AgentOrchestrator(props: AgentOrchestratorProps) {
++  return (
++    <div data-component="panacode-agent-orchestrator" data-panacode-feature="agent-orchestrator" class={props.class}>
++      <For each={props.lanes}>
++        {(lane) => (
++          <section data-slot="lane" data-status={lane.status}>
++            <header>
++              <h4>{lane.title}</h4>
++              <span>{lane.status}</span>
++            </header>
++            <div data-slot="lane-body">{lane.body}</div>
++          </section>
++        )}
++      </For>
++    </div>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/agent-run/agent-run.css b/packages/panacode-ui/src/features/agent-run/agent-run.css
+new file mode 100644
+index 000000000..28f1ce023
+--- /dev/null
++++ b/packages/panacode-ui/src/features/agent-run/agent-run.css
+@@ -0,0 +1,48 @@
++[data-component="panacode-agent-run"] {
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-panel, 1.625rem);
++  background: var(--surface, oklch(100% 0 0));
++  padding: var(--space-4, 1rem);
++}
++
++[data-component="panacode-agent-run"] [data-slot="run-header"] {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: var(--space-3, 0.75rem);
++  margin-bottom: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-agent-run"] [data-slot="run-header"] h3 {
++  margin: 0;
++  font-family: var(--font-display, inherit);
++  font-size: var(--text-lg, 1.125rem);
++  letter-spacing: var(--tracking-display, -0.03em);
++}
++
++[data-component="panacode-agent-run"] [data-slot="run-status"] {
++  text-transform: capitalize;
++  font-size: var(--text-xs, 0.75rem);
++  padding: 0.2rem 0.55rem;
++  border-radius: var(--radius-pill, 9999px);
++  background: var(--surface-muted, oklch(97.8% 0 0));
++}
++
++[data-component="panacode-agent-run"] [data-slot="run-steps"] {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 0.5rem);
++}
++
++[data-component="panacode-agent-run"] [data-slot="run-steps"] li {
++  padding: var(--space-3, 0.75rem);
++  border-radius: var(--radius-control, 1.125rem);
++  background: var(--surface-muted, oklch(97.8% 0 0));
++}
++
++[data-component="panacode-agent-run"] [data-slot="step-title"] {
++  font-weight: 500;
++}
+diff --git a/packages/panacode-ui/src/features/agent-run/index.tsx b/packages/panacode-ui/src/features/agent-run/index.tsx
+new file mode 100644
+index 000000000..187dabba1
+--- /dev/null
++++ b/packages/panacode-ui/src/features/agent-run/index.tsx
+@@ -0,0 +1,42 @@
++import { For, Show, type JSX } from "solid-js"
++import "./agent-run.css"
++
++export type AgentRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled"
++
++export type AgentRunStep = {
++  id: string
++  title: string
++  status: AgentRunStatus
++  detail?: JSX.Element
++}
++
++export interface AgentRunProps {
++  title: string
++  status: AgentRunStatus
++  statusLabel: string
++  steps: readonly AgentRunStep[]
++  class?: string
++}
++
++export function AgentRun(props: AgentRunProps) {
++  return (
++    <section data-component="panacode-agent-run" data-panacode-feature="agent-run" data-status={props.status} class={props.class}>
++      <header data-slot="run-header">
++        <h3>{props.title}</h3>
++        <span data-slot="run-status">{props.statusLabel}</span>
++      </header>
++      <ol data-slot="run-steps">
++        <For each={props.steps}>
++          {(step) => (
++            <li data-status={step.status}>
++              <div data-slot="step-title">{step.title}</div>
++              <Show when={step.detail}>
++                <div data-slot="step-detail">{step.detail}</div>
++              </Show>
++            </li>
++          )}
++        </For>
++      </ol>
++    </section>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/ai-chat/ai-chat.css b/packages/panacode-ui/src/features/ai-chat/ai-chat.css
+new file mode 100644
+index 000000000..2d8a24107
+--- /dev/null
++++ b/packages/panacode-ui/src/features/ai-chat/ai-chat.css
+@@ -0,0 +1,62 @@
++[data-component="panacode-ai-chat"] {
++  display: flex;
++  flex-direction: column;
++  min-height: 0;
++  height: 100%;
++  background: var(--background, transparent);
++  color: var(--foreground, inherit);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-scroll"] {
++  flex: 1;
++  min-height: 0;
++  overflow: auto;
++  padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 1rem);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="user"] {
++  align-self: flex-end;
++  max-width: min(720px, 92%);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="assistant"],
++[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="system"] {
++  align-self: stretch;
++  max-width: min(820px, 100%);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-bubble"] {
++  border-radius: var(--radius-panel, 1.625rem);
++  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
++  line-height: var(--leading-body, 1.4);
++  letter-spacing: var(--tracking-body, -0.01em);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="user"] [data-slot="chat-bubble"] {
++  background: var(--accent, oklch(33% 0 0));
++  color: var(--accent-foreground, oklch(100% 0 0));
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="assistant"] [data-slot="chat-bubble"] {
++  background: var(--surface-muted, oklch(97.8% 0 0));
++  border: 1px solid var(--border-subtle, transparent);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-streaming] [data-slot="chat-bubble"] {
++  box-shadow: inset 0 0 0 1px var(--accent-subtle, oklch(33% 0 0 / 0.1));
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-footer"] {
++  border-top: 1px solid var(--border-subtle, oklch(96.5% 0 0));
++  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
++  background: var(--surface, transparent);
++}
++
++[data-component="panacode-ai-chat"] [data-slot="chat-empty"] {
++  margin: auto;
++  color: var(--text-muted, oklch(59% 0 0));
++  text-align: center;
++}
+diff --git a/packages/panacode-ui/src/features/ai-chat/index.tsx b/packages/panacode-ui/src/features/ai-chat/index.tsx
+new file mode 100644
+index 000000000..0bb5316e0
+--- /dev/null
++++ b/packages/panacode-ui/src/features/ai-chat/index.tsx
+@@ -0,0 +1,40 @@
++import { For, Show, type JSX } from "solid-js"
++import "./ai-chat.css"
++
++export type ChatRole = "user" | "assistant" | "system"
++
++export type ChatMessageView = {
++  id: string
++  role: ChatRole
++  content: JSX.Element
++  streaming?: boolean
++}
++
++export interface AiChatProps {
++  messages: readonly ChatMessageView[]
++  empty?: JSX.Element
++  footer?: JSX.Element
++  class?: string
++}
++
++/** Presentation shell for session chat. Bind real session parts via the app adapter. */
++export function AiChat(props: AiChatProps) {
++  return (
++    <div data-component="panacode-ai-chat" data-panacode-feature="ai-chat" class={props.class}>
++      <div data-slot="chat-scroll">
++        <Show when={props.messages.length > 0} fallback={<div data-slot="chat-empty">{props.empty}</div>}>
++          <For each={props.messages}>
++            {(message) => (
++              <article data-slot="chat-message" data-role={message.role} data-streaming={message.streaming ? "" : undefined}>
++                <div data-slot="chat-bubble">{message.content}</div>
++              </article>
++            )}
++          </For>
++        </Show>
++      </div>
++      <Show when={props.footer}>
++        <div data-slot="chat-footer">{props.footer}</div>
++      </Show>
++    </div>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/ai-composer/ai-composer.css b/packages/panacode-ui/src/features/ai-composer/ai-composer.css
+new file mode 100644
+index 000000000..978a9b356
+--- /dev/null
++++ b/packages/panacode-ui/src/features/ai-composer/ai-composer.css
+@@ -0,0 +1,37 @@
++[data-component="panacode-ai-composer"] {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 0.5rem);
++  padding: var(--space-3, 0.75rem);
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-panel, 1.625rem);
++  background: var(--surface, oklch(100% 0 0));
++  box-shadow: var(--shadow-resting, 0 1px 2px oklch(0% 0 0 / 0.035));
++}
++
++[data-component="panacode-ai-composer"] [data-slot="composer-input"] {
++  width: 100%;
++  resize: vertical;
++  min-height: 4.5rem;
++  border: 0;
++  outline: none;
++  background: transparent;
++  color: var(--foreground, inherit);
++  font: inherit;
++  font-size: var(--text-base, 1rem);
++  line-height: var(--leading-body, 1.4);
++  letter-spacing: var(--tracking-body, -0.01em);
++}
++
++[data-component="panacode-ai-composer"] [data-slot="composer-actions"] {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-ai-composer"] [data-slot="composer-toolbar"] {
++  display: flex;
++  flex-wrap: wrap;
++  gap: var(--space-2, 0.5rem);
++}
+diff --git a/packages/panacode-ui/src/features/ai-composer/index.tsx b/packages/panacode-ui/src/features/ai-composer/index.tsx
+new file mode 100644
+index 000000000..74793f038
+--- /dev/null
++++ b/packages/panacode-ui/src/features/ai-composer/index.tsx
+@@ -0,0 +1,66 @@
++import { Show, type JSX } from "solid-js"
++import { Button } from "../../primitives/button"
++import "./ai-composer.css"
++
++export interface AiComposerProps {
++  value: string
++  onChange: (value: string) => void
++  onSubmit: () => void
++  onStop?: () => void
++  busy?: boolean
++  placeholder?: string
++  sendLabel: string
++  stopLabel: string
++  toolbar?: JSX.Element
++  modelSlot?: JSX.Element
++  disabled?: boolean
++  class?: string
++}
++
++/** Composer chrome. Wire OpenCode composer controllers into these callbacks. */
++export function AiComposer(props: AiComposerProps) {
++  return (
++    <form
++      data-component="panacode-ai-composer"
++      data-panacode-feature="ai-composer"
++      class={props.class}
++      onSubmit={(event) => {
++        event.preventDefault()
++        if (!props.busy) props.onSubmit()
++      }}
++    >
++      <Show when={props.toolbar}>
++        <div data-slot="composer-toolbar">{props.toolbar}</div>
++      </Show>
++      <textarea
++        data-slot="composer-input"
++        value={props.value}
++        disabled={props.disabled}
++        placeholder={props.placeholder}
++        rows={3}
++        onInput={(event) => props.onChange(event.currentTarget.value)}
++        onKeyDown={(event) => {
++          if (event.key === "Enter" && !event.shiftKey) {
++            event.preventDefault()
++            if (!props.busy && !props.disabled) props.onSubmit()
++          }
++        }}
++      />
++      <div data-slot="composer-actions">
++        <div data-slot="composer-model">{props.modelSlot}</div>
++        <Show
++          when={!props.busy}
++          fallback={
++            <Button type="button" variant="secondary" onClick={() => props.onStop?.()}>
++              {props.stopLabel}
++            </Button>
++          }
++        >
++          <Button type="submit" disabled={props.disabled || !props.value.trim()}>
++            {props.sendLabel}
++          </Button>
++        </Show>
++      </div>
++    </form>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/code-suggestion/code-suggestion.css b/packages/panacode-ui/src/features/code-suggestion/code-suggestion.css
+new file mode 100644
+index 000000000..f392b1a06
+--- /dev/null
++++ b/packages/panacode-ui/src/features/code-suggestion/code-suggestion.css
+@@ -0,0 +1,43 @@
++[data-component="panacode-code-suggestion"] {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-code-suggestion"] [data-slot="suggestion-header"] {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-code-suggestion"] [data-slot="suggestion-header"] h3 {
++  margin: 0;
++  font-family: var(--font-display, inherit);
++  letter-spacing: var(--tracking-display, -0.03em);
++}
++
++[data-component="panacode-code-suggestion"] [data-slot="suggestion-hunk"] {
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-panel, 1.625rem);
++  overflow: hidden;
++  background: var(--surface, oklch(100% 0 0));
++}
++
++[data-component="panacode-code-suggestion"] [data-slot="suggestion-hunk"] > header {
++  display: flex;
++  justify-content: space-between;
++  gap: var(--space-2, 0.5rem);
++  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
++  background: var(--surface-muted, oklch(97.8% 0 0));
++}
++
++[data-component="panacode-code-suggestion"] [data-slot="hunk-actions"] {
++  display: flex;
++  gap: var(--space-2, 0.5rem);
++}
++
++[data-component="panacode-code-suggestion"] [data-slot="hunk-body"] {
++  padding: var(--space-3, 0.75rem);
++  overflow: auto;
++}
+diff --git a/packages/panacode-ui/src/features/code-suggestion/index.tsx b/packages/panacode-ui/src/features/code-suggestion/index.tsx
+new file mode 100644
+index 000000000..9b80fc2d0
+--- /dev/null
++++ b/packages/panacode-ui/src/features/code-suggestion/index.tsx
+@@ -0,0 +1,67 @@
++import { For, type JSX } from "solid-js"
++import { Button } from "../../primitives/button"
++import { SegmentedControl } from "../../primitives/segmented-control"
++import "./code-suggestion.css"
++
++export type SuggestionMode = "unified" | "split"
++
++export type SuggestionHunk = {
++  id: string
++  path: string
++  body: JSX.Element
++}
++
++export interface CodeSuggestionProps {
++  title: string
++  mode: SuggestionMode
++  onModeChange: (mode: SuggestionMode) => void
++  hunks: readonly SuggestionHunk[]
++  onAccept?: (id: string) => void
++  onReject?: (id: string) => void
++  class?: string
++  labels: {
++    unified: string
++    split: string
++    accept: string
++    reject: string
++    layoutAria: string
++  }
++}
++
++/** Review presentation — keep Pierre/diff engines in OpenCode; render through this shell. */
++export function CodeSuggestion(props: CodeSuggestionProps) {
++  return (
++    <section data-component="panacode-code-suggestion" data-panacode-feature="code-suggestion" class={props.class}>
++      <header data-slot="suggestion-header">
++        <h3>{props.title}</h3>
++        <SegmentedControl
++          aria-label={props.labels.layoutAria}
++          value={props.mode}
++          onChange={props.onModeChange}
++          options={[
++            { value: "unified", label: props.labels.unified },
++            { value: "split", label: props.labels.split },
++          ]}
++        />
++      </header>
++      <For each={props.hunks}>
++        {(hunk) => (
++          <article data-slot="suggestion-hunk" data-mode={props.mode}>
++            <header>
++              <code>{hunk.path}</code>
++              <div data-slot="hunk-actions">
++                <Button size="sm" variant="secondary" onClick={() => props.onReject?.(hunk.id)}>
++                  {props.labels.reject}
++                </Button>
++                <Button size="sm" onClick={() => props.onAccept?.(hunk.id)}>
++                  {props.labels.accept}
++                </Button>
++              </div>
++            </header>
++            <div data-slot="hunk-body">{hunk.body}</div>
++          </article>
++        )}
++      </For>
++    </section>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/mcp-servers/index.tsx b/packages/panacode-ui/src/features/mcp-servers/index.tsx
+new file mode 100644
+index 000000000..a78089da9
+--- /dev/null
++++ b/packages/panacode-ui/src/features/mcp-servers/index.tsx
+@@ -0,0 +1,99 @@
++import { For, Show, createMemo, createSignal } from "solid-js"
++import { Button } from "../../primitives/button"
++import { Input } from "../../primitives/input"
++import { Switch } from "../../primitives/switch"
++import "./mcp-servers.css"
++
++export type McpServerView = {
++  id: string
++  name: string
++  description?: string
++  enabled: boolean
++  connected: boolean
++  error?: string
++}
++
++export interface McpServersProps {
++  servers: readonly McpServerView[]
++  onToggle: (id: string, enabled: boolean) => void
++  onConnect?: (id: string) => void
++  onDisconnect?: (id: string) => void
++  onAdd?: () => void
++  class?: string
++  /** Caller-supplied copy (i18n). Avoid hardcoded product strings in this package. */
++  labels: {
++    title: string
++    description: string
++    add: string
++    searchPlaceholder: string
++    searchAria: string
++    enabled: string
++    connect: string
++    disconnect: string
++  }
++}
++
++/** MCP settings block — bind real MCP registry state in the app adapter. */
++export function McpServers(props: McpServersProps) {
++  const [query, setQuery] = createSignal("")
++  const filtered = createMemo(() => {
++    const q = query().trim().toLowerCase()
++    if (!q) return props.servers
++    return props.servers.filter((server) => server.name.toLowerCase().includes(q) || server.description?.toLowerCase().includes(q))
++  })
++
++  return (
++    <section data-component="panacode-mcp-servers" data-panacode-feature="mcp-servers" class={props.class}>
++      <header data-slot="mcp-header">
++        <div>
++          <h3>{props.labels.title}</h3>
++          <p>{props.labels.description}</p>
++        </div>
++        <Show when={props.onAdd}>
++          <Button size="sm" onClick={() => props.onAdd?.()}>
++            {props.labels.add}
++          </Button>
++        </Show>
++      </header>
++      <Input
++        type="search"
++        placeholder={props.labels.searchPlaceholder}
++        value={query()}
++        onInput={(event) => setQuery(event.currentTarget.value)}
++        aria-label={props.labels.searchAria}
++      />
++      <ul data-slot="mcp-list">
++        <For each={filtered()}>
++          {(server) => (
++            <li data-connected={server.connected ? "" : undefined}>
++              <div data-slot="mcp-meta">
++                <strong>{server.name}</strong>
++                <Show when={server.description}>
++                  <p>{server.description}</p>
++                </Show>
++                <Show when={server.error}>
++                  <p data-slot="mcp-error">{server.error}</p>
++                </Show>
++              </div>
++              <div data-slot="mcp-controls">
++                <Switch checked={server.enabled} onChange={(checked) => props.onToggle(server.id, checked)}>
++                  {props.labels.enabled}
++                </Switch>
++                <Show when={!server.connected}>
++                  <Button size="sm" variant="secondary" onClick={() => props.onConnect?.(server.id)}>
++                    {props.labels.connect}
++                  </Button>
++                </Show>
++                <Show when={server.connected}>
++                  <Button size="sm" variant="ghost" onClick={() => props.onDisconnect?.(server.id)}>
++                    {props.labels.disconnect}
++                  </Button>
++                </Show>
++              </div>
++            </li>
++          )}
++        </For>
++      </ul>
++    </section>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/mcp-servers/mcp-servers.css b/packages/panacode-ui/src/features/mcp-servers/mcp-servers.css
+new file mode 100644
+index 000000000..efc02391c
+--- /dev/null
++++ b/packages/panacode-ui/src/features/mcp-servers/mcp-servers.css
+@@ -0,0 +1,65 @@
++[data-component="panacode-mcp-servers"] {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 1rem);
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-header"] {
++  display: flex;
++  justify-content: space-between;
++  gap: var(--space-3, 0.75rem);
++  align-items: flex-start;
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-header"] h3 {
++  margin: 0 0 var(--space-1, 0.25rem);
++  font-family: var(--font-display, inherit);
++  letter-spacing: var(--tracking-display, -0.03em);
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-header"] p {
++  margin: 0;
++  color: var(--text-secondary, oklch(46% 0 0));
++  font-size: var(--text-sm, 0.875rem);
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-list"] {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-list"] > li {
++  display: flex;
++  justify-content: space-between;
++  gap: var(--space-4, 1rem);
++  padding: var(--space-4, 1rem);
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-panel, 1.625rem);
++  background: var(--surface, oklch(100% 0 0));
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-meta"] strong {
++  display: block;
++  margin-bottom: var(--space-1, 0.25rem);
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-meta"] p {
++  margin: 0;
++  color: var(--text-secondary, oklch(46% 0 0));
++  font-size: var(--text-sm, 0.875rem);
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-error"] {
++  color: var(--danger, oklch(53% 0.18 10)) !important;
++}
++
++[data-component="panacode-mcp-servers"] [data-slot="mcp-controls"] {
++  display: flex;
++  flex-direction: column;
++  align-items: flex-end;
++  gap: var(--space-2, 0.5rem);
++}
+diff --git a/packages/panacode-ui/src/features/tool-call/index.tsx b/packages/panacode-ui/src/features/tool-call/index.tsx
+new file mode 100644
+index 000000000..f7807a3d9
+--- /dev/null
++++ b/packages/panacode-ui/src/features/tool-call/index.tsx
+@@ -0,0 +1,45 @@
++import { Show, createSignal, type JSX } from "solid-js"
++import "./tool-call.css"
++
++export type ToolCallStatus = "pending" | "running" | "completed" | "error"
++
++export interface ToolCallProps {
++  name: string
++  status: ToolCallStatus
++  args?: JSX.Element
++  output?: JSX.Element
++  error?: string
++  defaultOpen?: boolean
++  class?: string
++}
++
++export function ToolCall(props: ToolCallProps) {
++  const [open, setOpen] = createSignal(props.defaultOpen ?? props.status !== "completed")
++
++  return (
++    <details
++      data-component="panacode-tool-call"
++      data-panacode-feature="tool-call"
++      data-status={props.status}
++      class={props.class}
++      open={open()}
++      onToggle={(event) => setOpen(event.currentTarget.open)}
++    >
++      <summary>
++        <span data-slot="tool-name">{props.name}</span>
++        <span data-slot="tool-status">{props.status}</span>
++      </summary>
++      <Show when={props.args}>
++        <div data-slot="tool-args">{props.args}</div>
++      </Show>
++      <Show when={props.output}>
++        <div data-slot="tool-output">{props.output}</div>
++      </Show>
++      <Show when={props.error}>
++        <div data-slot="tool-error" role="alert">
++          {props.error}
++        </div>
++      </Show>
++    </details>
++  )
++}
+diff --git a/packages/panacode-ui/src/features/tool-call/tool-call.css b/packages/panacode-ui/src/features/tool-call/tool-call.css
+new file mode 100644
+index 000000000..2a49ec30e
+--- /dev/null
++++ b/packages/panacode-ui/src/features/tool-call/tool-call.css
+@@ -0,0 +1,41 @@
++[data-component="panacode-tool-call"] {
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-control, 1.125rem);
++  background: var(--surface-muted, oklch(97.8% 0 0));
++  overflow: hidden;
++}
++
++[data-component="panacode-tool-call"] > summary {
++  list-style: none;
++  cursor: pointer;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: var(--space-3, 0.75rem);
++  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
++  font-size: var(--text-sm, 0.875rem);
++}
++
++[data-component="panacode-tool-call"] > summary::-webkit-details-marker {
++  display: none;
++}
++
++[data-component="panacode-tool-call"] [data-slot="tool-name"] {
++  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
++}
++
++[data-component="panacode-tool-call"] [data-slot="tool-status"] {
++  text-transform: capitalize;
++  color: var(--text-secondary, oklch(46% 0 0));
++}
++
++[data-component="panacode-tool-call"] [data-slot="tool-args"],
++[data-component="panacode-tool-call"] [data-slot="tool-output"],
++[data-component="panacode-tool-call"] [data-slot="tool-error"] {
++  padding: 0 var(--space-4, 1rem) var(--space-3, 0.75rem);
++  font-size: var(--text-sm, 0.875rem);
++}
++
++[data-component="panacode-tool-call"] [data-slot="tool-error"] {
++  color: var(--danger, oklch(53% 0.18 10));
++}
+diff --git a/packages/panacode-ui/src/icons/.gitkeep b/packages/panacode-ui/src/icons/.gitkeep
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/packages/panacode-ui/src/index.ts b/packages/panacode-ui/src/index.ts
+new file mode 100644
+index 000000000..2a9875531
+--- /dev/null
++++ b/packages/panacode-ui/src/index.ts
+@@ -0,0 +1,15 @@
++export { PANACODE_THEME_ID, PANACODE_THEME_NAME, panacodeShell } from "./theme"
++export { motionTokens } from "./motion/tokens"
++export { Switch } from "./primitives/switch"
++export { Button } from "./primitives/button"
++export { Input } from "./primitives/input"
++export { SegmentedControl } from "./primitives/segmented-control"
++export { Badge } from "./primitives/badge"
++export { AiChat } from "./features/ai-chat"
++export { AiComposer } from "./features/ai-composer"
++export { AgentRun } from "./features/agent-run"
++export { AgentOrchestrator } from "./features/agent-orchestrator"
++export { AgentApprovals } from "./features/agent-approvals"
++export { ToolCall } from "./features/tool-call"
++export { CodeSuggestion } from "./features/code-suggestion"
++export { McpServers } from "./features/mcp-servers"
+diff --git a/packages/panacode-ui/src/motion/tokens.ts b/packages/panacode-ui/src/motion/tokens.ts
+new file mode 100644
+index 000000000..b502a21cb
+--- /dev/null
++++ b/packages/panacode-ui/src/motion/tokens.ts
+@@ -0,0 +1,16 @@
++/** Motion presets shared by Panacode primitives (ported from Arc MCP reference). */
++export const motionTokens = {
++  duration: { instant: 0.12, fast: 0.16, exit: 0.18, standard: 0.24, considered: 0.48 },
++  ease: {
++    enter: [0.16, 1, 0.3, 1] as const,
++    exit: [0.7, 0, 0.84, 0] as const,
++    standard: [0.22, 1, 0.36, 1] as const,
++    inOut: [0.65, 0, 0.35, 1] as const,
++  },
++  spring: {
++    snappy: { type: "spring" as const, visualDuration: 0.26, bounce: 0 },
++    smooth: { type: "spring" as const, visualDuration: 0.4, bounce: 0 },
++    morph: { type: "spring" as const, visualDuration: 0.42, bounce: 0 },
++  },
++  stagger: { char: 0.016, word: 0.04, line: 0.08, item: 0.035 },
++} as const
+diff --git a/packages/panacode-ui/src/primitives/badge.css b/packages/panacode-ui/src/primitives/badge.css
+new file mode 100644
+index 000000000..04b1db592
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/badge.css
+@@ -0,0 +1,31 @@
++[data-component="panacode-badge"] {
++  display: inline-flex;
++  align-items: center;
++  gap: 0.25rem;
++  padding: 0.125rem 0.5rem;
++  border-radius: var(--radius-pill, 9999px);
++  font-size: var(--text-xs, 0.75rem);
++  letter-spacing: var(--tracking-body, -0.01em);
++  background: var(--surface-muted, oklch(97.8% 0 0));
++  color: var(--text-secondary, oklch(46% 0 0));
++}
++
++[data-component="panacode-badge"][data-tone="success"] {
++  background: color-mix(in oklch, var(--success, oklch(50% 0.12 162)) 16%, transparent);
++  color: var(--success, oklch(50% 0.12 162));
++}
++
++[data-component="panacode-badge"][data-tone="warning"] {
++  background: color-mix(in oklch, var(--warning, oklch(55% 0.12 68)) 16%, transparent);
++  color: var(--warning, oklch(55% 0.12 68));
++}
++
++[data-component="panacode-badge"][data-tone="danger"] {
++  background: color-mix(in oklch, var(--danger, oklch(53% 0.18 10)) 16%, transparent);
++  color: var(--danger, oklch(53% 0.18 10));
++}
++
++[data-component="panacode-badge"][data-tone="info"] {
++  background: color-mix(in oklch, var(--info, oklch(51% 0.11 240)) 16%, transparent);
++  color: var(--info, oklch(51% 0.11 240));
++}
+diff --git a/packages/panacode-ui/src/primitives/badge.tsx b/packages/panacode-ui/src/primitives/badge.tsx
+new file mode 100644
+index 000000000..17ef8ceeb
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/badge.tsx
+@@ -0,0 +1,26 @@
++import { splitProps, type JSX, type ParentProps } from "solid-js"
++import "./badge.css"
++
++export function Badge(
++  props: ParentProps<{
++    tone?: "neutral" | "success" | "warning" | "danger" | "info"
++    class?: string
++    classList?: Record<string, boolean | undefined>
++  }> &
++    JSX.HTMLAttributes<HTMLSpanElement>,
++) {
++  const [local, others] = splitProps(props, ["children", "class", "classList", "tone"])
++  return (
++    <span
++      {...others}
++      data-component="panacode-badge"
++      data-tone={local.tone ?? "neutral"}
++      classList={{
++        ...local.classList,
++        [local.class ?? ""]: !!local.class,
++      }}
++    >
++      {local.children}
++    </span>
++  )
++}
+diff --git a/packages/panacode-ui/src/primitives/button.css b/packages/panacode-ui/src/primitives/button.css
+new file mode 100644
+index 000000000..a30d8472d
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/button.css
+@@ -0,0 +1,68 @@
++[data-component="panacode-button"] {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: var(--space-2, 0.5rem);
++  border: 0;
++  border-radius: var(--radius-control, 1.125rem);
++  font: inherit;
++  font-weight: 500;
++  letter-spacing: var(--tracking-body, -0.01em);
++  cursor: pointer;
++  transition:
++    background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    transform var(--duration-instant, 0.12s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-component="panacode-button"][data-size="sm"] {
++  min-height: var(--control-height-sm, 2.25rem);
++  padding: 0 var(--space-3, 0.75rem);
++  font-size: var(--text-sm, 0.875rem);
++}
++[data-component="panacode-button"][data-size="md"] {
++  min-height: var(--control-height-md, 2.75rem);
++  padding: 0 var(--space-4, 1rem);
++  font-size: var(--text-sm, 0.875rem);
++}
++[data-component="panacode-button"][data-size="lg"] {
++  min-height: var(--control-height-lg, 3.125rem);
++  padding: 0 var(--space-5, 1.25rem);
++  font-size: var(--text-base, 1rem);
++}
++
++[data-component="panacode-button"][data-variant="primary"] {
++  background: var(--accent, oklch(33% 0 0));
++  color: var(--accent-foreground, oklch(100% 0 0));
++}
++[data-component="panacode-button"][data-variant="secondary"] {
++  background: var(--surface-muted, oklch(97.8% 0 0));
++  color: var(--foreground, oklch(15% 0 0));
++}
++[data-component="panacode-button"][data-variant="ghost"] {
++  background: transparent;
++  color: var(--foreground, inherit);
++}
++[data-component="panacode-button"][data-variant="danger"] {
++  background: var(--danger, oklch(53% 0.18 10));
++  color: oklch(100% 0 0);
++}
++
++[data-component="panacode-button"]:disabled,
++[data-component="panacode-button"][data-loading] {
++  opacity: 0.55;
++  cursor: not-allowed;
++}
++
++[data-component="panacode-button"]:not(:disabled):active {
++  transform: scale(0.98);
++}
++
++@media (prefers-reduced-motion: reduce) {
++  [data-component="panacode-button"] {
++    transition: none;
++  }
++  [data-component="panacode-button"]:not(:disabled):active {
++    transform: none;
++  }
++}
+diff --git a/packages/panacode-ui/src/primitives/button.tsx b/packages/panacode-ui/src/primitives/button.tsx
+new file mode 100644
+index 000000000..240c42b40
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/button.tsx
+@@ -0,0 +1,36 @@
++import { type ComponentProps, splitProps } from "solid-js"
++import "./button.css"
++
++export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger"
++export type ButtonSize = "sm" | "md" | "lg"
++
++export interface ButtonProps extends ComponentProps<"button"> {
++  variant?: ButtonVariant
++  size?: ButtonSize
++  loading?: boolean
++}
++
++/** Arc-inspired button shell. Keeps native button semantics for OpenCode keyboard/a11y contracts. */
++export function Button(props: ButtonProps) {
++  const [local, rest] = splitProps(props, ["variant", "size", "loading", "class", "classList", "disabled", "children"])
++  const disabled = () => local.disabled || local.loading
++
++  return (
++    <button
++      type="button"
++      {...rest}
++      disabled={disabled()}
++      data-component="panacode-button"
++      data-panacode-primitive="button"
++      data-variant={local.variant ?? "primary"}
++      data-size={local.size ?? "md"}
++      data-loading={local.loading ? "" : undefined}
++      classList={{
++        ...local.classList,
++        [local.class ?? ""]: !!local.class,
++      }}
++    >
++      <span data-slot="button-label">{local.children}</span>
++    </button>
++  )
++}
+diff --git a/packages/panacode-ui/src/primitives/input.css b/packages/panacode-ui/src/primitives/input.css
+new file mode 100644
+index 000000000..641c755f3
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/input.css
+@@ -0,0 +1,29 @@
++[data-component="panacode-input"] {
++  box-sizing: border-box;
++  width: 100%;
++  min-height: var(--control-height-md, 2.75rem);
++  padding: 0 var(--space-4, 1rem);
++  border: 1px solid var(--border, oklch(93.5% 0 0));
++  border-radius: var(--radius-control, 1.125rem);
++  background: var(--surface, oklch(100% 0 0));
++  color: var(--foreground, oklch(15% 0 0));
++  font: inherit;
++  font-size: var(--text-sm, 0.875rem);
++  letter-spacing: var(--tracking-body, -0.01em);
++  outline: none;
++  transition: border-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-component="panacode-input"]::placeholder {
++  color: var(--text-muted, oklch(59% 0 0));
++}
++
++[data-component="panacode-input"]:focus-visible {
++  border-color: var(--border-strong, oklch(82% 0 0));
++  box-shadow: 0 0 0 3px var(--accent-subtle, oklch(33% 0 0 / 0.1));
++}
++
++[data-component="panacode-input"]:disabled {
++  opacity: 0.55;
++  cursor: not-allowed;
++}
+diff --git a/packages/panacode-ui/src/primitives/input.tsx b/packages/panacode-ui/src/primitives/input.tsx
+new file mode 100644
+index 000000000..a0721343c
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/input.tsx
+@@ -0,0 +1,19 @@
++import { splitProps, type ComponentProps } from "solid-js"
++import "./input.css"
++
++export interface InputProps extends ComponentProps<"input"> {}
++
++export function Input(props: InputProps) {
++  const [local, rest] = splitProps(props, ["class", "classList"])
++  return (
++    <input
++      {...rest}
++      data-component="panacode-input"
++      data-panacode-primitive="input"
++      classList={{
++        ...local.classList,
++        [local.class ?? ""]: !!local.class,
++      }}
++    />
++  )
++}
+diff --git a/packages/panacode-ui/src/primitives/segmented-control.css b/packages/panacode-ui/src/primitives/segmented-control.css
+new file mode 100644
+index 000000000..f74c4662e
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/segmented-control.css
+@@ -0,0 +1,27 @@
++[data-component="panacode-segmented"] {
++  display: inline-flex;
++  gap: 2px;
++  padding: 3px;
++  border-radius: var(--radius-control, 1.125rem);
++  background: var(--surface-muted, oklch(97.8% 0 0));
++}
++
++[data-component="panacode-segmented"] > button {
++  appearance: none;
++  border: 0;
++  background: transparent;
++  color: var(--text-secondary, oklch(46% 0 0));
++  border-radius: calc(var(--radius-control, 1.125rem) - 2px);
++  min-height: calc(var(--control-height-sm, 2.25rem) - 2px);
++  padding: 0 var(--space-3, 0.75rem);
++  font: inherit;
++  font-size: var(--text-sm, 0.875rem);
++  cursor: pointer;
++  transition: background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-component="panacode-segmented"] > button[data-active] {
++  background: var(--surface, oklch(100% 0 0));
++  color: var(--foreground, oklch(15% 0 0));
++  box-shadow: var(--shadow-resting, 0 1px 2px oklch(0% 0 0 / 0.035));
++}
+diff --git a/packages/panacode-ui/src/primitives/segmented-control.tsx b/packages/panacode-ui/src/primitives/segmented-control.tsx
+new file mode 100644
+index 000000000..3a41eaa13
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/segmented-control.tsx
+@@ -0,0 +1,43 @@
++import { For, splitProps, type JSX } from "solid-js"
++import "./segmented-control.css"
++
++export type SegmentOption<T extends string = string> = {
++  value: T
++  label: JSX.Element
++}
++
++export interface SegmentedControlProps<T extends string = string> {
++  options: readonly SegmentOption<T>[]
++  value: T
++  onChange: (value: T) => void
++  class?: string
++  "aria-label"?: string
++}
++
++export function SegmentedControl<T extends string>(props: SegmentedControlProps<T>) {
++  const [local] = splitProps(props, ["options", "value", "onChange", "class", "aria-label"])
++
++  return (
++    <div
++      role="tablist"
++      aria-label={local["aria-label"]}
++      data-component="panacode-segmented"
++      data-panacode-primitive="segmented-control"
++      class={local.class}
++    >
++      <For each={local.options}>
++        {(option) => (
++          <button
++            type="button"
++            role="tab"
++            aria-selected={local.value === option.value}
++            data-active={local.value === option.value ? "" : undefined}
++            onClick={() => local.onChange(option.value)}
++          >
++            {option.label}
++          </button>
++        )}
++      </For>
++    </div>
++  )
++}
+diff --git a/packages/panacode-ui/src/primitives/switch.css b/packages/panacode-ui/src/primitives/switch.css
+new file mode 100644
+index 000000000..fdcf1ef9e
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/switch.css
+@@ -0,0 +1,114 @@
++/* Arc-inspired pill switch (MCP Servers reference), Kobalte slots. */
++[data-component="panacode-switch"] {
++  display: inline-flex;
++  min-height: var(--control-height-md, 2.75rem);
++  align-items: center;
++  gap: var(--space-3, 0.75rem);
++  padding: 0;
++  border: 0;
++  color: var(--foreground, inherit);
++  background: transparent;
++  font: inherit;
++  font-size: var(--text-sm, 0.875rem);
++  cursor: pointer;
++  -webkit-tap-highlight-color: transparent;
++  position: relative;
++}
++
++[data-component="panacode-switch"][data-disabled] {
++  cursor: not-allowed;
++  opacity: 0.5;
++}
++
++[data-component="panacode-switch"] [data-slot="switch-input"] {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  padding: 0;
++  margin: -1px;
++  overflow: hidden;
++  clip: rect(0, 0, 0, 0);
++  white-space: nowrap;
++  border-width: 0;
++}
++
++[data-component="panacode-switch"] [data-slot="switch-control"] {
++  position: relative;
++  box-sizing: border-box;
++  display: flex;
++  flex: 0 0 auto;
++  width: 42px;
++  height: 24px;
++  align-items: center;
++  padding: 3px;
++  border-radius: var(--radius-pill, 9999px);
++  background: var(--control-track, oklch(89.5% 0 0));
++  isolation: isolate;
++  transition: background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-component="panacode-switch"] [data-slot="switch-control"]::before {
++  content: "";
++  position: absolute;
++  inset: 0;
++  z-index: -1;
++  border-radius: inherit;
++  background: var(--control-on, oklch(23% 0 0));
++  opacity: 0;
++  transition: opacity var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-component="panacode-switch"][data-checked] [data-slot="switch-control"]::before {
++  opacity: 1;
++}
++
++[data-component="panacode-switch"] [data-slot="switch-thumb"] {
++  flex: 0 0 auto;
++  width: 18px;
++  height: 18px;
++  border-radius: var(--radius-pill, 9999px);
++  background: var(--control-thumb, oklch(100% 0 0));
++  box-shadow: var(
++    --control-thumb-shadow,
++    0 0 0 0.5px oklch(0% 0 0 / 0.07),
++    0 1px 2px oklch(0% 0 0 / 0.14),
++    0 2px 6px oklch(0% 0 0 / 0.06)
++  );
++  transform: translateX(0);
++  transition:
++    transform var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    background-color var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    width var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-component="panacode-switch"][data-checked] [data-slot="switch-thumb"] {
++  transform: translateX(18px);
++  background: var(--control-thumb-on, oklch(100% 0 0));
++}
++
++[data-component="panacode-switch"]:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
++  transform: translateX(-18px);
++}
++
++@media (hover: hover) and (pointer: fine) {
++  [data-component="panacode-switch"]:not([data-checked]):hover:not([data-disabled]) [data-slot="switch-control"] {
++    background: var(--control-track-hover, oklch(86% 0 0));
++  }
++}
++
++[data-component="panacode-switch"]:not([data-disabled]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
++  outline: 2px solid color-mix(in oklab, var(--accent-strong, currentColor) 72%, transparent);
++  outline-offset: 2px;
++}
++
++[data-component="panacode-switch"] [data-slot="switch-label"] {
++  line-height: var(--leading-body, 1.4);
++}
++
++@media (prefers-reduced-motion: reduce) {
++  [data-component="panacode-switch"] [data-slot="switch-control"],
++  [data-component="panacode-switch"] [data-slot="switch-control"]::before,
++  [data-component="panacode-switch"] [data-slot="switch-thumb"] {
++    transition: none;
++  }
++}
+diff --git a/packages/panacode-ui/src/primitives/switch.tsx b/packages/panacode-ui/src/primitives/switch.tsx
+new file mode 100644
+index 000000000..13047e985
+--- /dev/null
++++ b/packages/panacode-ui/src/primitives/switch.tsx
+@@ -0,0 +1,44 @@
++/**
++ * Canonical Panacode Switch — SolidJS + Kobalte, Arc visual language from the MCP Servers reference.
++ * Prefer this (or the restyled `@opencode/ui/switch` CSS overlay) for all application toggles.
++ */
++import { Control, Description, ErrorMessage, Input, Label, Root, Thumb } from "@kobalte/core/switch"
++import { Show, splitProps, type ComponentProps, type ParentProps } from "solid-js"
++import "./switch.css"
++
++export interface SwitchProps extends ParentProps<ComponentProps<typeof Root>> {
++  hideLabel?: boolean
++  description?: string
++}
++
++export function Switch(props: SwitchProps) {
++  const [local, others] = splitProps(props, ["children", "class", "classList", "hideLabel", "description"])
++
++  return (
++    <Root
++      {...others}
++      data-component="panacode-switch"
++      data-panacode-primitive="switch"
++      classList={{
++        ...local.classList,
++        [local.class ?? ""]: !!local.class,
++      }}
++    >
++      <Input data-slot="switch-input" />
++      <Show when={local.children}>
++        {(label) => (
++          <Label data-slot="switch-label" classList={{ "sr-only": local.hideLabel }}>
++            {label()}
++          </Label>
++        )}
++      </Show>
++      <Show when={local.description}>
++        <Description data-slot="switch-description">{local.description}</Description>
++      </Show>
++      <Control data-slot="switch-control">
++        <Thumb data-slot="switch-thumb" />
++      </Control>
++      <ErrorMessage data-slot="switch-error" />
++    </Root>
++  )
++}
+diff --git a/packages/panacode-ui/src/styles/index.css b/packages/panacode-ui/src/styles/index.css
+new file mode 100644
+index 000000000..40aca919a
+--- /dev/null
++++ b/packages/panacode-ui/src/styles/index.css
+@@ -0,0 +1,15 @@
++@import "../theme/tokens.css";
++@import "../primitives/switch.css";
++@import "../primitives/button.css";
++@import "../primitives/input.css";
++@import "../primitives/segmented-control.css";
++@import "../primitives/badge.css";
++@import "../features/ai-chat/ai-chat.css";
++@import "../features/ai-composer/ai-composer.css";
++@import "../features/agent-run/agent-run.css";
++@import "../features/agent-orchestrator/agent-orchestrator.css";
++@import "../features/agent-approvals/agent-approvals.css";
++@import "../features/tool-call/tool-call.css";
++@import "../features/code-suggestion/code-suggestion.css";
++@import "../features/mcp-servers/mcp-servers.css";
++@import "./shell.css";
+diff --git a/packages/panacode-ui/src/styles/shell.css b/packages/panacode-ui/src/styles/shell.css
+new file mode 100644
+index 000000000..2289f2be8
+--- /dev/null
++++ b/packages/panacode-ui/src/styles/shell.css
+@@ -0,0 +1,188 @@
++/*
++ * Phase 2 shell overlay — applies Panacode surfaces to OpenCode layout chrome
++ * without rewriting session engines. Scoped via [data-brand="panacode"].
++ */
++[data-brand="panacode"] {
++  font-family: var(--font-body, inherit);
++  letter-spacing: var(--tracking-body, -0.01em);
++  background: var(--background);
++  color: var(--foreground);
++}
++
++/* ---- Buttons ---- */
++[data-brand="panacode"] [data-component="button-v2"],
++[data-brand="panacode"] [data-component="button"] {
++  border-radius: var(--radius-control, 1.125rem);
++  letter-spacing: var(--tracking-body, -0.01em);
++  transition:
++    background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    box-shadow var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++/* ---- Canonical Switch bridge (upstream Kobalte → Arc pill) ---- */
++[data-brand="panacode"] [data-component="switch"] {
++  gap: var(--space-3, 0.75rem);
++}
++
++[data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"] {
++  position: relative;
++  box-sizing: border-box;
++  width: 42px;
++  height: 24px;
++  padding: 3px;
++  border-radius: var(--radius-pill, 9999px);
++  border: 0;
++  background: var(--control-track, oklch(89.5% 0 0));
++  box-shadow: none;
++  isolation: isolate;
++  transition: background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"]::before {
++  content: "";
++  position: absolute;
++  inset: 0;
++  z-index: -1;
++  border-radius: inherit;
++  background: var(--control-on, oklch(23% 0 0));
++  opacity: 0;
++  transition: opacity var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-brand="panacode"] [data-component="switch"][data-checked] [data-slot="switch-control"]::before {
++  opacity: 1;
++}
++
++[data-brand="panacode"] [data-component="switch"] [data-slot="switch-thumb"] {
++  width: 18px;
++  height: 18px;
++  border-radius: var(--radius-pill, 9999px);
++  border: 0;
++  background: var(--control-thumb, oklch(100% 0 0));
++  box-shadow: var(
++    --control-thumb-shadow,
++    0 0 0 0.5px oklch(0% 0 0 / 0.07),
++    0 1px 2px oklch(0% 0 0 / 0.14),
++    0 2px 6px oklch(0% 0 0 / 0.06)
++  );
++  transform: translateX(0);
++  transition:
++    transform var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
++    background-color var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
++}
++
++[data-brand="panacode"] [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
++  transform: translateX(18px);
++  background: var(--control-thumb-on, oklch(100% 0 0));
++}
++
++[data-brand="panacode"] [data-component="switch"]:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
++  transform: translateX(-18px);
++}
++
++[data-brand="panacode"] [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
++  transform: translateX(18px);
++  width: 18px;
++}
++
++@media (prefers-reduced-motion: reduce) {
++  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"],
++  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"]::before,
++  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-thumb"] {
++    transition: none;
++  }
++}
++
++/* ---- Shell / sidebar / tabs ---- */
++[data-brand="panacode"] .sidebar,
++[data-brand="panacode"] [data-slot="sidebar"],
++[data-brand="panacode"] [data-component="sidebar"] {
++  background: var(--surface-muted, var(--surface));
++  border-color: var(--border-subtle, var(--border));
++}
++
++[data-brand="panacode"] [data-component="tabs"] [data-selected],
++[data-brand="panacode"] .settings-subtabs [data-selected] {
++  border-radius: var(--radius-control, 1.125rem);
++}
++
++[data-brand="panacode"] .settings-tab-title,
++[data-brand="panacode"] [data-slot="settings-title"] {
++  letter-spacing: var(--tracking-display, -0.02em);
++}
++
++[data-brand="panacode"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
++[data-brand="panacode"] textarea,
++[data-brand="panacode"] [data-component="text-field"] input,
++[data-brand="panacode"] [data-component="text-field"] textarea {
++  border-radius: var(--radius-control, 1.125rem);
++  border-color: var(--border, oklch(93.5% 0 0));
++  background: var(--surface, var(--neutral-0, #fff));
++}
++
++[data-brand="panacode"] [data-component="dialog"],
++[data-brand="panacode"] [data-component="popover"],
++[data-brand="panacode"] [role="dialog"] {
++  border-radius: var(--radius-panel, 1.5rem);
++  box-shadow: var(--shadow-floating, 0 20px 48px oklch(0% 0 0 / 0.105));
++}
++
++/* ---- Session / chat / tools ---- */
++[data-brand="panacode"] [data-component="tool-part-wrapper"],
++[data-brand="panacode"] [data-component="tool-trigger"] {
++  border-radius: var(--radius-control, 1.125rem);
++  border-color: var(--border-subtle, var(--border));
++  background: var(--surface-muted, var(--surface));
++}
++
++[data-brand="panacode"] [data-slot="permission-footer-actions"] button,
++[data-brand="panacode"] [data-component="dock-prompt"] button {
++  border-radius: var(--radius-control, 1.125rem);
++}
++
++[data-brand="panacode"] [data-component="session-composer"],
++[data-brand="panacode"] [data-slot="composer"],
++[data-brand="panacode"] .session-composer {
++  border-radius: var(--radius-panel, 1.5rem);
++  border-color: var(--border-subtle, var(--border));
++  background: var(--surface-raised, var(--surface));
++  box-shadow: var(--shadow-resting, 0 1px 2px oklch(0% 0 0 / 0.035));
++}
++
++/* ---- File tree / terminal chrome ---- */
++[data-brand="panacode"] [data-component="file-tree"],
++[data-brand="panacode"] [data-slot="file-tree"],
++[data-brand="panacode"] .file-tree {
++  background: var(--surface-muted, var(--surface));
++}
++
++[data-brand="panacode"] [data-component="terminal-tabs"],
++[data-brand="panacode"] [data-slot="terminal-toolbar"] {
++  border-color: var(--border-subtle, var(--border));
++  background: var(--surface-muted, var(--surface));
++}
++
++/* ---- Review / code suggestion chrome ---- */
++[data-brand="panacode"] [data-component="review"],
++[data-brand="panacode"] [data-slot="review-header"] {
++  border-radius: var(--radius-panel, 1.5rem);
++}
++
++/* ---- Scrollbars (app-controlled) ---- */
++[data-brand="panacode"] * {
++  scrollbar-width: thin;
++  scrollbar-color: var(--neutral-5, #d4d4d4) transparent;
++}
++
++[data-brand="panacode"]::-webkit-scrollbar {
++  width: 10px;
++  height: 10px;
++}
++
++[data-brand="panacode"]::-webkit-scrollbar-thumb {
++  border-radius: 9999px;
++  background: var(--neutral-5, #d4d4d4);
++  border: 2px solid transparent;
++  background-clip: padding-box;
++}
+diff --git a/packages/panacode-ui/src/theme/index.ts b/packages/panacode-ui/src/theme/index.ts
+new file mode 100644
+index 000000000..60d48efd1
+--- /dev/null
++++ b/packages/panacode-ui/src/theme/index.ts
+@@ -0,0 +1,8 @@
++export const PANACODE_THEME_ID = "panacode" as const
++export const PANACODE_THEME_NAME = "Panacode" as const
++
++/** CSS class / data attribute hooks used by the shell overlay. */
++export const panacodeShell = {
++  root: "panacode-ui",
++  dataBrand: "panacode",
++} as const
+diff --git a/packages/panacode-ui/src/theme/tokens.css b/packages/panacode-ui/src/theme/tokens.css
+new file mode 100644
+index 000000000..9a6a84186
+--- /dev/null
++++ b/packages/panacode-ui/src/theme/tokens.css
+@@ -0,0 +1,216 @@
++/* Panacode-owned Arc token set. Source: arc-ex MCP Servers reference (ported). Do not edit OpenCode theme JSON for these. */
++
++/*
++ * Arc theme tokens.
++ *
++ * Every Arc component reads these custom properties. Import this file once, before your own styles, and switch
++ * themes by setting data-theme="dark" on the root element. If your app already carries Arc's tokens, skip it.
++ */
++
++:root {
++  color-scheme: light;
++
++  /* Neutral scale */
++  --neutral-0: oklch(100% 0 0);
++  --neutral-1: oklch(99% 0 0);
++  --neutral-2: oklch(97.8% 0 0);
++  --neutral-3: oklch(95.8% 0 0);
++  --neutral-4: oklch(91.5% 0 0);
++  --neutral-5: oklch(84% 0 0);
++  --neutral-6: oklch(72% 0 0);
++  --neutral-7: oklch(59% 0 0);
++  --neutral-8: oklch(46% 0 0);
++  --neutral-9: oklch(34% 0 0);
++  --neutral-10: oklch(23% 0 0);
++  --neutral-11: oklch(15% 0 0);
++
++  /* Surfaces and text */
++  --background: var(--neutral-0);
++  --surface: var(--neutral-0);
++  --surface-raised: var(--neutral-0);
++  --surface-muted: var(--neutral-2);
++  --foreground: var(--neutral-11);
++  --text-secondary: var(--neutral-8);
++  --text-muted: var(--neutral-7);
++  --border: oklch(93.5% 0 0);
++  --border-subtle: oklch(96.5% 0 0);
++  --border-strong: oklch(82% 0 0);
++
++  /* Accent */
++  --accent: oklch(33% 0 0);
++  --accent-strong: oklch(24% 0 0);
++  --accent-subtle: oklch(33% 0 0 / 0.1);
++  --accent-foreground: var(--background);
++
++  /* Controls */
++  --control-on: oklch(23% 0 0);
++  --control-glyph: oklch(100% 0 0);
++  --control-track: oklch(89.5% 0 0);
++  --control-track-hover: oklch(86% 0 0);
++  --control-thumb: oklch(100% 0 0);
++  --control-thumb-on: oklch(100% 0 0);
++  --control-thumb-shadow: 0 0 0 0.5px oklch(0% 0 0 / 0.07), 0 1px 2px oklch(0% 0 0 / 0.14), 0 2px 6px oklch(0% 0 0 / 0.06);
++  --control-on-subtle: var(--control-on);
++  --control-fill: var(--control-on);
++  --focus-ring: transparent;
++
++  /* Semantic tones */
++  --tone-teal: oklch(50% 0.095 182);
++  --tone-sky: oklch(51% 0.11 240);
++  --tone-orchid: oklch(52% 0.17 322);
++  --tone-violet: oklch(51% 0.16 290);
++  --tone-rose: oklch(53% 0.18 10);
++  --tone-amber: oklch(55% 0.12 68);
++  --tone-green: oklch(50% 0.12 162);
++  --success: var(--tone-green);
++  --warning: var(--tone-amber);
++  --danger: var(--tone-rose);
++  --info: var(--tone-sky);
++
++  /* Data series. The first follows a chromatic accent and falls back to blue under a neutral one. */
++  --series-1: #1f7dcf;
++
++  /* Elevation */
++  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.035);
++  --shadow-raised: 0 6px 18px oklch(0% 0 0 / 0.065), 0 1px 3px oklch(0% 0 0 / 0.035);
++  --shadow-floating: 0 20px 48px oklch(0% 0 0 / 0.105), 0 3px 10px oklch(0% 0 0 / 0.045);
++
++  /* Space, shape and control sizes */
++  --space-1: 0.25rem;
++  --space-2: 0.5rem;
++  --space-3: 0.75rem;
++  --space-4: 1rem;
++  --space-5: 1.25rem;
++  --space-6: 1.5rem;
++  --space-8: 2rem;
++  --space-10: 2.5rem;
++  --space-12: 3rem;
++  --space-16: 4rem;
++  --space-20: 5rem;
++  --space-24: 6rem;
++  --radius-control: 1.125rem;
++  --radius-panel: 1.625rem;
++  --radius-surface: 2.125rem;
++  --radius-pill: 9999px;
++  --control-height-sm: 2.25rem;
++  --control-height-md: 2.75rem;
++  --control-height-lg: 3.125rem;
++
++  /* Type */
++  --font-display: var(--font-geist, "Geist Variable"), sans-serif;
++  --font-body: var(--font-inter, "Inter Variable"), sans-serif;
++  --text-xs: 0.75rem;
++  --text-sm: 0.875rem;
++  --text-base: 1rem;
++  --text-lg: 1.125rem;
++  --text-xl: 1.375rem;
++  --text-2xl: 1.75rem;
++  --text-3xl: 2.25rem;
++  --text-4xl: 3.25rem;
++  --text-5xl: 4.5rem;
++  --tracking-display: -0.03em;
++  --tracking-body: -0.01em;
++  --leading-display: 1.1;
++  --leading-body: 1.4;
++
++  /* Motion */
++  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
++  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
++  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
++  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
++  --duration-instant: 0.12s;
++  --duration-fast: 0.16s;
++  --duration-standard: 0.24s;
++  --duration-considered: 0.48s;
++  --duration-spring: 0.58s;
++}
++
++:root[data-theme="dark"] {
++  color-scheme: dark;
++
++  --background: oklch(19% 0 0);
++  --surface: oklch(21.5% 0 0);
++  --surface-raised: oklch(24% 0 0);
++  --surface-muted: oklch(26% 0 0);
++  --foreground: oklch(96% 0 0);
++  --text-secondary: oklch(77% 0 0);
++  --text-muted: oklch(64% 0 0);
++  --border: oklch(29% 0 0);
++  --border-subtle: oklch(25% 0 0);
++  --border-strong: oklch(40% 0 0);
++
++  --accent: oklch(80% 0 0);
++  --accent-strong: oklch(91% 0 0);
++  --accent-subtle: oklch(80% 0 0 / 0.13);
++
++  --control-on: oklch(93% 0 0);
++  --control-glyph: oklch(19% 0 0);
++  --control-track: oklch(33% 0 0);
++  --control-track-hover: oklch(37% 0 0);
++  --control-thumb: oklch(97% 0 0);
++  --control-thumb-on: oklch(19% 0 0);
++  --control-fill: oklch(62% 0 0);
++  --control-thumb-shadow: 0 0 0 0.5px oklch(0% 0 0 / 0.3), 0 1px 2px oklch(0% 0 0 / 0.35), 0 2px 6px oklch(0% 0 0 / 0.2);
++  --focus-ring: transparent;
++
++  --tone-teal: oklch(79% 0.13 182);
++  --tone-sky: oklch(79% 0.095 236);
++  --tone-orchid: oklch(76% 0.15 322);
++  --tone-violet: oklch(74% 0.125 290);
++  --tone-rose: oklch(71% 0.155 8);
++  --tone-amber: oklch(83% 0.12 78);
++  --tone-green: oklch(79% 0.14 162);
++  --success: var(--tone-green);
++  --warning: var(--tone-amber);
++  --danger: var(--tone-rose);
++  --info: var(--tone-sky);
++
++  --series-1: #55adff;
++
++  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.18);
++  --shadow-raised: 0 8px 22px oklch(0% 0 0 / 0.22);
++  --shadow-floating: 0 22px 55px oklch(0% 0 0 / 0.34);
++}
++
++/* Where relative colors are available, the first series color is derived from the accent. */
++@supports (color: oklch(from red l c h)) {
++  :root {
++    --series-1: oklch(
++      from var(--accent) calc(l * sign(max(c - 0.02, 0)) + 0.58 * (1 - sign(max(c - 0.02, 0))))
++        calc(c * sign(max(c - 0.02, 0)) + 0.15 * (1 - sign(max(c - 0.02, 0))))
++        calc(h * sign(max(c - 0.02, 0)) + 250 * (1 - sign(max(c - 0.02, 0))))
++    );
++  }
++
++  :root[data-theme="dark"] {
++    --series-1: oklch(
++      from var(--accent) calc(l * sign(max(c - 0.02, 0)) + 0.73 * (1 - sign(max(c - 0.02, 0))))
++        calc(c * sign(max(c - 0.02, 0)) + 0.15 * (1 - sign(max(c - 0.02, 0))))
++        calc(h * sign(max(c - 0.02, 0)) + 250 * (1 - sign(max(c - 0.02, 0))))
++    );
++  }
++}
++
++/*
++ * The shared focus ring. Only keyboard focus draws it. Text fields, menu items and elements that receive focus from
++ * script (tabindex="-1") style their own focus. A component moves the ring with --focus-outline-offset.
++ */
++:focus-visible:not(
++    input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]),
++    textarea,
++    [contenteditable]:not([contenteditable="false"]),
++    [role="menuitem"],
++    [role="menuitemcheckbox"],
++    [role="menuitemradio"],
++    [role="option"],
++    [tabindex="-1"]
++  ) {
++  outline: var(--focus-outline-width, 2px) solid var(--focus-outline, color-mix(in oklab, var(--accent-strong) 72%, transparent)) !important;
++  outline-offset: var(--focus-outline-offset, 2px) !important;
++}
++
++/* Pointer focus draws no ring, and text fields show focus on their own border instead of an outline. */
++:focus:not(:focus-visible),
++:is(input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]), textarea, [contenteditable]:not([contenteditable="false"])) {
++  outline: none !important;
++}
+diff --git a/packages/panacode-ui/src/tokens/.gitkeep b/packages/panacode-ui/src/tokens/.gitkeep
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/packages/panacode-ui/tsconfig.json b/packages/panacode-ui/tsconfig.json
+new file mode 100644
+index 000000000..48db552b5
+--- /dev/null
++++ b/packages/panacode-ui/tsconfig.json
+@@ -0,0 +1,20 @@
++{
++  "$schema": "https://json.schemastore.org/tsconfig",
++  "extends": "@tsconfig/node22/tsconfig.json",
++  "compilerOptions": {
++    "jsx": "preserve",
++    "jsxImportSource": "solid-js",
++    "target": "ESNext",
++    "module": "ESNext",
++    "moduleResolution": "bundler",
++    "allowSyntheticDefaultImports": true,
++    "esModuleInterop": true,
++    "isolatedModules": true,
++    "noEmit": true,
++    "strict": true,
++    "lib": ["es2023", "dom", "dom.iterable"],
++    "types": ["bun"]
++  },
++  "include": ["src/**/*.ts", "src/**/*.tsx"],
++  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
++}
+diff --git a/packages/ui/src/theme/context.tsx b/packages/ui/src/theme/context.tsx
+index 234a24c35..aff288261 100644
+--- a/packages/ui/src/theme/context.tsx
++++ b/packages/ui/src/theme/context.tsx
+@@ -66,6 +66,7 @@ function knownThemes() {
+ const names = new Map(
+   Object.entries({
+     "oc-2": "OpenCode",
++    panacode: "Panacode",
+     amoled: "AMOLED",
+     aura: "Aura",
+     ayu: "Ayu",
+diff --git a/packages/ui/src/theme/themes/panacode.json b/packages/ui/src/theme/themes/panacode.json
+new file mode 100644
+index 000000000..9033c9764
+--- /dev/null
++++ b/packages/ui/src/theme/themes/panacode.json
+@@ -0,0 +1,509 @@
++{
++  "$schema": "https://opencode.ai/desktop-theme.json",
++  "name": "Panacode",
++  "id": "panacode",
++  "light": {
++    "palette": {
++      "neutral": "#f7f7f7",
++      "ink": "#171717",
++      "primary": "#2a2a2a",
++      "success": "#12c905",
++      "warning": "#ffdc17",
++      "error": "#fc533a",
++      "info": "#a753ae",
++      "interactive": "#1f7dcf",
++      "diffAdd": "#9ff29a",
++      "diffDelete": "#fc533a"
++    },
++    "overrides": {
++      "text-strong": "#171717",
++      "text-base": "#6F6F6F",
++      "text-weak": "#8F8F8F",
++      "text-weaker": "#C7C7C7",
++      "text-diff-add-base": "var(--v2-state-fg-success)",
++      "text-diff-delete-base": "var(--v2-state-fg-danger)",
++      "border-weak-base": "#DBDBDB",
++      "border-weaker-base": "#E8E8E8",
++      "icon-base": "#8F8F8F",
++      "icon-weak-base": "#C7C7C7",
++      "surface-raised-base": "#F3F3F3",
++      "surface-raised-base-hover": "#EDEDED",
++      "surface-base": "#F8F8F8",
++      "surface-base-hover": "#0000000A",
++      "surface-interactive-weak": "#F5FAFF",
++      "icon-success-base": "#0ABE00",
++      "surface-success-base": "#E6FFE5",
++      "syntax-comment": "var(--v2-text-text-muted)",
++      "syntax-keyword": "var(--v2-pink-800)",
++      "syntax-string": "var(--v2-green-800)",
++      "syntax-primitive": "var(--v2-pink-800)",
++      "syntax-property": "var(--v2-orange-800)",
++      "syntax-type": "var(--v2-purple-800)",
++      "syntax-constant": "#007b80",
++      "syntax-critical": "var(--v2-red-800)",
++      "syntax-diff-add": "var(--v2-state-fg-success)",
++      "syntax-diff-delete": "var(--v2-state-fg-danger)",
++      "syntax-diff-unknown": "#a753ae",
++      "surface-critical-base": "#FFF2F0"
++    },
++    "v2Overrides": {
++      "v2-grey-50": "#ffffffff",
++      "v2-grey-100": "#fafafaff",
++      "v2-grey-200": "#f2f2f2ff",
++      "v2-grey-300": "#eeeeeeff",
++      "v2-grey-400": "#dbdbdbff",
++      "v2-grey-500": "#aeaeaeff",
++      "v2-grey-600": "#808080ff",
++      "v2-grey-700": "#5c5c5cff",
++      "v2-grey-800": "#3a3a3aff",
++      "v2-grey-900": "#2e2e2eff",
++      "v2-grey-1000": "#242424ff",
++      "v2-grey-1100": "#161616ff",
++      "v2-grey-1200": "#080808ff",
++      "v2-red-100": "#fcecebff",
++      "v2-red-200": "#f6d5d3ff",
++      "v2-red-300": "#f2bbb7ff",
++      "v2-red-400": "#f29b96ff",
++      "v2-red-500": "#f17471ff",
++      "v2-red-600": "#f1484fff",
++      "v2-red-700": "#d92e3cff",
++      "v2-red-800": "#b82d35ff",
++      "v2-red-900": "#97252bff",
++      "v2-red-1000": "#7a1f23ff",
++      "v2-red-1100": "#5f1a1cff",
++      "v2-red-1200": "#461516ff",
++      "v2-orange-100": "#fdf2edff",
++      "v2-orange-200": "#ffe7dcff",
++      "v2-orange-300": "#ffd8c6ff",
++      "v2-orange-400": "#ffc1a4ff",
++      "v2-orange-500": "#ffa478ff",
++      "v2-orange-600": "#ff8648ff",
++      "v2-orange-700": "#ee7330ff",
++      "v2-orange-800": "#d16427ff",
++      "v2-orange-900": "#b35624ff",
++      "v2-orange-1000": "#954c27ff",
++      "v2-orange-1100": "#723d22ff",
++      "v2-orange-1200": "#5a2c14ff",
++      "v2-yellow-100": "#fefaecff",
++      "v2-yellow-200": "#fcefd0ff",
++      "v2-yellow-300": "#f7e5b5ff",
++      "v2-yellow-400": "#f3da9bff",
++      "v2-yellow-500": "#f2cf76ff",
++      "v2-yellow-600": "#f6c251ff",
++      "v2-yellow-700": "#e7af36ff",
++      "v2-yellow-800": "#cb9f34ff",
++      "v2-yellow-900": "#ac8833ff",
++      "v2-yellow-1000": "#8e7231ff",
++      "v2-yellow-1100": "#68552bff",
++      "v2-yellow-1200": "#4b4025ff",
++      "v2-green-100": "#e7f9eaff",
++      "v2-green-200": "#d0f0d5ff",
++      "v2-green-300": "#b8e9c1ff",
++      "v2-green-400": "#96e3a6ff",
++      "v2-green-500": "#6bd586ff",
++      "v2-green-600": "#49c970ff",
++      "v2-green-700": "#2eaf5aff",
++      "v2-green-800": "#198b43ff",
++      "v2-green-900": "#1d783cff",
++      "v2-green-1000": "#196130ff",
++      "v2-green-1100": "#164c26ff",
++      "v2-green-1200": "#14361dff",
++      "v2-cyan-100": "#e2f7fbff",
++      "v2-cyan-200": "#c4edf4ff",
++      "v2-cyan-300": "#a3e4efff",
++      "v2-cyan-400": "#65d9ebff",
++      "v2-cyan-500": "#00c5dfff",
++      "v2-cyan-600": "#00abcfff",
++      "v2-cyan-700": "#0096b8ff",
++      "v2-cyan-800": "#007d9bff",
++      "v2-cyan-900": "#006c85ff",
++      "v2-cyan-1000": "#005a6eff",
++      "v2-cyan-1100": "#004756ff",
++      "v2-cyan-1200": "#00353fff",
++      "v2-blue-100": "#f5f8ffff",
++      "v2-blue-200": "#ecf1feff",
++      "v2-blue-300": "#c3d4fdff",
++      "v2-blue-400": "#a2bcffff",
++      "v2-blue-500": "#7698fdff",
++      "v2-blue-600": "#3b5cf6ff",
++      "v2-blue-700": "#0b34f4ff",
++      "v2-blue-800": "#3250dfff",
++      "v2-blue-900": "#2c47c8ff",
++      "v2-blue-1000": "#263fa9ff",
++      "v2-blue-1100": "#22388fff",
++      "v2-blue-1200": "#021945ff",
++      "v2-purple-100": "#ebecfeff",
++      "v2-purple-200": "#d5d5fcff",
++      "v2-purple-300": "#b9b8f5ff",
++      "v2-purple-400": "#9e99f7ff",
++      "v2-purple-500": "#8271f8ff",
++      "v2-purple-600": "#7152f4ff",
++      "v2-purple-700": "#623be2ff",
++      "v2-purple-800": "#5230c2ff",
++      "v2-purple-900": "#442aa1ff",
++      "v2-purple-1000": "#361f83ff",
++      "v2-purple-1100": "#2b1b6aff",
++      "v2-purple-1200": "#221358ff",
++      "v2-pink-100": "#fdecf3ff",
++      "v2-pink-200": "#f7d5e4ff",
++      "v2-pink-300": "#fabcd8ff",
++      "v2-pink-400": "#f799c6ff",
++      "v2-pink-500": "#f26cb2ff",
++      "v2-pink-600": "#f64aabff",
++      "v2-pink-700": "#e4429eff",
++      "v2-pink-800": "#c83d8bff",
++      "v2-pink-900": "#aa3576ff",
++      "v2-pink-1000": "#8c2d61ff",
++      "v2-pink-1100": "#6f284fff",
++      "v2-pink-1200": "#5c1d3fff",
++      "v2-background-bg-base": "var(--v2-grey-50)",
++      "v2-background-bg-deep": "var(--v2-grey-100)",
++      "v2-background-bg-layer-01": "var(--v2-grey-100)",
++      "v2-background-bg-layer-02": "var(--v2-grey-200)",
++      "v2-background-bg-layer-03": "var(--v2-grey-300)",
++      "v2-background-bg-layer-04": "var(--v2-grey-400)",
++      "v2-background-bg-inverse": "var(--v2-grey-1100)",
++      "v2-background-bg-contrast": "var(--v2-grey-1000)",
++      "v2-background-bg-icon-button-contrast": "var(--v2-background-bg-contrast)",
++      "v2-background-bg-button-neutral": "var(--v2-grey-50)",
++      "v2-background-bg-accent": "var(--v2-blue-600)",
++      "v2-background-bg-code-path": "var(--v2-cyan-100)",
++      "v2-text-text-base": "var(--v2-grey-1100)",
++      "v2-text-text-muted": "var(--v2-grey-700)",
++      "v2-text-text-faint": "var(--v2-grey-600)",
++      "v2-text-text-inverse": "var(--v2-grey-50)",
++      "v2-text-text-contrast": "var(--v2-grey-50)",
++      "v2-text-text-accent": "var(--v2-blue-600)",
++      "v2-text-text-accent-hover": "var(--v2-blue-700)",
++      "v2-text-text-code-accent": "var(--v2-blue-900)",
++      "v2-text-text-code-path": "var(--v2-blue-900)",
++      "v2-icon-icon-base": "var(--v2-grey-800)",
++      "v2-icon-icon-muted": "var(--v2-grey-600)",
++      "v2-icon-icon-faint": "var(--v2-grey-500)",
++      "v2-icon-icon-inverse": "var(--v2-grey-50)",
++      "v2-icon-icon-contrast": "var(--v2-grey-100)",
++      "v2-icon-icon-accent": "var(--v2-blue-600)",
++      "v2-icon-icon-accent-hover": "var(--v2-blue-700)",
++      "v2-border-border-muted": "var(--v2-alpha-dark-8)",
++      "v2-border-border-base": "var(--v2-alpha-dark-10)",
++      "v2-border-border-strong": "var(--v2-alpha-dark-20)",
++      "v2-border-border-inverse": "var(--v2-grey-1000)",
++      "v2-border-border-focus": "var(--v2-blue-500)",
++      "v2-overlay-simple-overlay-hover": "var(--v2-alpha-dark-4)",
++      "v2-overlay-simple-overlay-pressed": "var(--v2-alpha-dark-8)",
++      "v2-overlay-simple-overlay-contrast-hover": "var(--v2-alpha-light-12)",
++      "v2-overlay-simple-overlay-contrast-pressed": "var(--v2-alpha-light-24)",
++      "v2-overlay-simple-overlay-scrim": "var(--v2-alpha-dark-40)",
++      "v2-overlay-gradient-depth-overlay-depth-top": "var(--v2-alpha-light-100)",
++      "v2-overlay-gradient-depth-overlay-depth-bot": "var(--v2-alpha-light-0)",
++      "v2-overlay-simple-tab-active-scrim": "#fafafa00",
++      "v2-overlay-simple-tab-hover-scrim": "#eeeeee00",
++      "v2-overlay-simple-tab-scrim": "#fafafa00",
++      "v2-state-bg-success": "var(--v2-green-100)",
++      "v2-state-fg-success": "var(--v2-green-800)",
++      "v2-state-border-success": "var(--v2-green-300)",
++      "v2-state-bg-warning": "var(--v2-yellow-100)",
++      "v2-state-fg-warning": "var(--v2-yellow-800)",
++      "v2-state-border-warning": "var(--v2-yellow-300)",
++      "v2-state-bg-danger": "var(--v2-red-100)",
++      "v2-state-fg-danger": "var(--v2-red-800)",
++      "v2-state-border-danger": "var(--v2-red-300)",
++      "v2-state-bg-info": "var(--v2-blue-200)",
++      "v2-state-fg-info": "var(--v2-blue-800)",
++      "v2-state-border-info": "var(--v2-blue-300)",
++      "v2-agent-plan-solid": "var(--v2-pink-800)",
++      "v2-agent-plan-border": "rgba(200, 61, 139, 0.2)",
++      "v2-agent-plan-background": "rgba(253, 236, 243, 0.1)",
++      "v2-agent-build-solid": "var(--v2-blue-800)",
++      "v2-agent-build-border": "rgba(44, 71, 200, 0.1)",
++      "v2-agent-build-background": "rgba(236, 241, 254, 0.1)",
++      "v2-agent-explore-solid": "var(--v2-yellow-900)",
++      "v2-agent-explore-border": "rgba(203, 159, 52, 0.2)",
++      "v2-agent-explore-background": "rgba(254, 250, 236, 0.1)",
++      "v2-agent-review-solid": "var(--v2-green-800)",
++      "v2-agent-writer-solid": "var(--v2-purple-700)",
++      "v2-avatar-bg-orange": "#ee7330ff",
++      "v2-avatar-border-orange": "#d16427ff",
++      "v2-avatar-bg-yellow": "#e7af36ff",
++      "v2-avatar-border-yellow": "#cb9f34ff",
++      "v2-avatar-bg-cyan": "#0096b8ff",
++      "v2-avatar-border-cyan": "#007d9bff",
++      "v2-avatar-bg-green": "#2eaf5aff",
++      "v2-avatar-border-green": "#198b43ff",
++      "v2-avatar-bg-red": "#d92e3cff",
++      "v2-avatar-border-red": "#b82d35ff",
++      "v2-avatar-bg-pink": "#e4429eff",
++      "v2-avatar-border-pink": "#c83d8bff",
++      "v2-avatar-bg-blue": "#3250dfff",
++      "v2-avatar-border-blue": "#2c47c8ff",
++      "v2-avatar-bg-purple": "#623be2ff",
++      "v2-avatar-border-purple": "#5230c2ff",
++      "v2-avatar-bg-gray": "#5c5c5cff",
++      "v2-avatar-border-gray": "#3a3a3aff",
++      "v2-elevation-raised": "0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
++      "v2-elevation-floating": "0px 8px 16px 0px var(--v2-alpha-dark-4), 0px 4px 8px 0px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
++      "v2-elevation-overlay": "0px 16px 32px 0px var(--v2-alpha-dark-4), 0px 8px 16px 0px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
++      "v2-elevation-input": "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
++      "v2-elevation-button-neutral": "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
++      "v2-elevation-button-contrast": "0px 1px 1.5px 0px var(--v2-alpha-dark-20), 0px 0px 0px 0.5px var(--v2-grey-800), inset 0px 1px 2px 0px var(--v2-alpha-light-14), inset 0px -1px 2px 0px var(--v2-alpha-dark-6), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
++      "v2-elevation-elements": "0px 0.5px 0.5px 0px var(--v2-alpha-dark-40)",
++      "v2-elevation-switch-off": "inset 0px 1px 1px 0px var(--v2-alpha-dark-8), inset 0px 0.5px 0.5px 0px var(--v2-alpha-dark-8), inset 0px 0px 0px 0.5px var(--v2-alpha-dark-10)",
++      "v2-elevation-switch-on": "inset 0px 2px 2px 0px var(--v2-alpha-dark-10), inset 0px 1px 1px 0px var(--v2-alpha-dark-10), inset 0px 0px 0px 0.5px var(--v2-alpha-dark-20)",
++      "v2-illustration-illustration-layer-01": "var(--v2-grey-300)",
++      "v2-illustration-illustration-layer-02": "var(--v2-grey-400)",
++      "v2-illustration-illustration-layer-03": "var(--v2-grey-500)",
++      "v2-font-family-code": "var(--font-family-mono)"
++    }
++  },
++  "dark": {
++    "palette": {
++      "neutral": "#171717",
++      "ink": "#f5f5f5",
++      "primary": "#e8e8e8",
++      "success": "#12c905",
++      "warning": "#fcd53a",
++      "error": "#fc533a",
++      "info": "#edb2f1",
++      "interactive": "#55adff",
++      "diffAdd": "#c8ffc4",
++      "diffDelete": "#fc533a"
++    },
++    "overrides": {
++      "text-strong": "#EDEDED",
++      "text-base": "#A0A0A0",
++      "text-weak": "#707070",
++      "text-weaker": "#505050",
++      "text-diff-add-base": "var(--v2-state-fg-success)",
++      "text-diff-delete-base": "var(--v2-state-fg-danger)",
++      "border-weak-base": "#282828",
++      "border-weaker-base": "#232323",
++      "icon-base": "#7E7E7E",
++      "icon-weak-base": "#343434",
++      "surface-raised-base": "#232323",
++      "surface-raised-base-hover": "#282828",
++      "surface-base": "#1C1C1C",
++      "surface-base-hover": "#FFFFFF0D",
++      "surface-interactive-weak": "#0D172B",
++      "surface-success-base": "#022B00",
++      "syntax-comment": "var(--v2-text-text-muted)",
++      "syntax-keyword": "var(--v2-pink-400)",
++      "syntax-string": "var(--v2-green-400)",
++      "syntax-primitive": "var(--v2-pink-400)",
++      "syntax-property": "var(--v2-orange-400)",
++      "syntax-type": "var(--v2-purple-400)",
++      "syntax-constant": "#93e9f6",
++      "syntax-critical": "var(--v2-red-400)",
++      "syntax-diff-add": "var(--v2-state-fg-success)",
++      "syntax-diff-delete": "var(--v2-state-fg-danger)",
++      "syntax-diff-unknown": "#edb2f1",
++      "surface-critical-base": "#1F0603"
++    },
++    "v2Overrides": {
++      "v2-grey-50": "#ffffffff",
++      "v2-grey-100": "#fafafaff",
++      "v2-grey-200": "#f2f2f2ff",
++      "v2-grey-300": "#eeeeeeff",
++      "v2-grey-400": "#dbdbdbff",
++      "v2-grey-500": "#aeaeaeff",
++      "v2-grey-600": "#808080ff",
++      "v2-grey-700": "#5c5c5cff",
++      "v2-grey-800": "#3a3a3aff",
++      "v2-grey-900": "#2e2e2eff",
++      "v2-grey-1000": "#242424ff",
++      "v2-grey-1100": "#161616ff",
++      "v2-grey-1200": "#080808ff",
++      "v2-red-100": "#fcecebff",
++      "v2-red-200": "#f6d5d3ff",
++      "v2-red-300": "#f2bbb7ff",
++      "v2-red-400": "#f29b96ff",
++      "v2-red-500": "#f17471ff",
++      "v2-red-600": "#f1484fff",
++      "v2-red-700": "#d92e3cff",
++      "v2-red-800": "#b82d35ff",
++      "v2-red-900": "#97252bff",
++      "v2-red-1000": "#7a1f23ff",
++      "v2-red-1100": "#5f1a1cff",
++      "v2-red-1200": "#461516ff",
++      "v2-orange-100": "#fdf2edff",
++      "v2-orange-200": "#ffe7dcff",
++      "v2-orange-300": "#ffd8c6ff",
++      "v2-orange-400": "#ffc1a4ff",
++      "v2-orange-500": "#ffa478ff",
++      "v2-orange-600": "#ff8648ff",
++      "v2-orange-700": "#ee7330ff",
++      "v2-orange-800": "#d16427ff",
++      "v2-orange-900": "#b35624ff",
++      "v2-orange-1000": "#954c27ff",
++      "v2-orange-1100": "#723d22ff",
++      "v2-orange-1200": "#5a2c14ff",
++      "v2-yellow-100": "#fefaecff",
++      "v2-yellow-200": "#fcefd0ff",
++      "v2-yellow-300": "#f7e5b5ff",
++      "v2-yellow-400": "#f3da9bff",
++      "v2-yellow-500": "#f2cf76ff",
++      "v2-yellow-600": "#f6c251ff",
++      "v2-yellow-700": "#e7af36ff",
++      "v2-yellow-800": "#cb9f34ff",
++      "v2-yellow-900": "#ac8833ff",
++      "v2-yellow-1000": "#8e7231ff",
++      "v2-yellow-1100": "#68552bff",
++      "v2-yellow-1200": "#4b4025ff",
++      "v2-green-100": "#e7f9eaff",
++      "v2-green-200": "#d0f0d5ff",
++      "v2-green-300": "#b8e9c1ff",
++      "v2-green-400": "#96e3a6ff",
++      "v2-green-500": "#6bd586ff",
++      "v2-green-600": "#49c970ff",
++      "v2-green-700": "#2eaf5aff",
++      "v2-green-800": "#198b43ff",
++      "v2-green-900": "#1d783cff",
++      "v2-green-1000": "#196130ff",
++      "v2-green-1100": "#164c26ff",
++      "v2-green-1200": "#14361dff",
++      "v2-cyan-100": "#e2f7fbff",
++      "v2-cyan-200": "#c4edf4ff",
++      "v2-cyan-300": "#a3e4efff",
++      "v2-cyan-400": "#65d9ebff",
++      "v2-cyan-500": "#00c5dfff",
++      "v2-cyan-600": "#00abcfff",
++      "v2-cyan-700": "#0096b8ff",
++      "v2-cyan-800": "#007d9bff",
++      "v2-cyan-900": "#006c85ff",
++      "v2-cyan-1000": "#005a6eff",
++      "v2-cyan-1100": "#004756ff",
++      "v2-cyan-1200": "#00353fff",
++      "v2-blue-100": "#f5f8ffff",
++      "v2-blue-200": "#ecf1feff",
++      "v2-blue-300": "#c3d4fdff",
++      "v2-blue-400": "#a2bcffff",
++      "v2-blue-500": "#7698fdff",
++      "v2-blue-600": "#3b5cf6ff",
++      "v2-blue-700": "#0b34f4ff",
++      "v2-blue-800": "#3250dfff",
++      "v2-blue-900": "#2c47c8ff",
++      "v2-blue-1000": "#263fa9ff",
++      "v2-blue-1100": "#22388fff",
++      "v2-blue-1200": "#021945ff",
++      "v2-purple-100": "#ebecfeff",
++      "v2-purple-200": "#d5d5fcff",
++      "v2-purple-300": "#b9b8f5ff",
++      "v2-purple-400": "#9e99f7ff",
++      "v2-purple-500": "#8271f8ff",
++      "v2-purple-600": "#7152f4ff",
++      "v2-purple-700": "#623be2ff",
++      "v2-purple-800": "#5230c2ff",
++      "v2-purple-900": "#442aa1ff",
++      "v2-purple-1000": "#361f83ff",
++      "v2-purple-1100": "#2b1b6aff",
++      "v2-purple-1200": "#221358ff",
++      "v2-pink-100": "#fdecf3ff",
++      "v2-pink-200": "#f7d5e4ff",
++      "v2-pink-300": "#fabcd8ff",
++      "v2-pink-400": "#f799c6ff",
++      "v2-pink-500": "#f26cb2ff",
++      "v2-pink-600": "#f64aabff",
++      "v2-pink-700": "#e4429eff",
++      "v2-pink-800": "#c83d8bff",
++      "v2-pink-900": "#aa3576ff",
++      "v2-pink-1000": "#8c2d61ff",
++      "v2-pink-1100": "#6f284fff",
++      "v2-pink-1200": "#5c1d3fff",
++      "v2-background-bg-base": "var(--v2-grey-1100)",
++      "v2-background-bg-deep": "var(--v2-grey-1200)",
++      "v2-background-bg-layer-01": "var(--v2-grey-1000)",
++      "v2-background-bg-layer-02": "var(--v2-grey-900)",
++      "v2-background-bg-layer-03": "var(--v2-grey-800)",
++      "v2-background-bg-layer-04": "var(--v2-grey-700)",
++      "v2-background-bg-inverse": "var(--v2-grey-50)",
++      "v2-background-bg-contrast": "var(--v2-grey-700)",
++      "v2-background-bg-icon-button-contrast": "var(--v2-grey-400)",
++      "v2-background-bg-button-neutral": "var(--v2-alpha-light-6)",
++      "v2-background-bg-accent": "var(--v2-blue-600)",
++      "v2-background-bg-code-path": "var(--v2-cyan-1200)",
++      "v2-text-text-base": "var(--v2-grey-100)",
++      "v2-text-text-muted": "var(--v2-grey-500)",
++      "v2-text-text-faint": "var(--v2-grey-600)",
++      "v2-text-text-inverse": "var(--v2-grey-1100)",
++      "v2-text-text-contrast": "var(--v2-grey-50)",
++      "v2-text-text-accent": "var(--v2-blue-400)",
++      "v2-text-text-accent-hover": "var(--v2-blue-300)",
++      "v2-text-text-code-accent": "var(--v2-blue-400)",
++      "v2-text-text-code-path": "var(--v2-blue-300)",
++      "v2-icon-icon-base": "var(--v2-grey-400)",
++      "v2-icon-icon-muted": "var(--v2-grey-600)",
++      "v2-icon-icon-faint": "var(--v2-grey-700)",
++      "v2-icon-icon-inverse": "var(--v2-grey-1100)",
++      "v2-icon-icon-contrast": "var(--v2-grey-100)",
++      "v2-icon-icon-accent": "var(--v2-blue-400)",
++      "v2-icon-icon-accent-hover": "var(--v2-blue-300)",
++      "v2-border-border-muted": "var(--v2-alpha-light-8)",
++      "v2-border-border-base": "var(--v2-alpha-light-10)",
++      "v2-border-border-strong": "var(--v2-alpha-light-20)",
++      "v2-border-border-inverse": "var(--v2-grey-100)",
++      "v2-border-border-focus": "var(--v2-blue-500)",
++      "v2-overlay-simple-overlay-hover": "var(--v2-alpha-light-6)",
++      "v2-overlay-simple-overlay-pressed": "var(--v2-alpha-light-10)",
++      "v2-overlay-simple-overlay-contrast-hover": "var(--v2-alpha-dark-24)",
++      "v2-overlay-simple-overlay-contrast-pressed": "var(--v2-alpha-dark-40)",
++      "v2-overlay-simple-overlay-scrim": "var(--v2-alpha-dark-60)",
++      "v2-overlay-gradient-depth-overlay-depth-top": "var(--v2-alpha-light-100)",
++      "v2-overlay-gradient-depth-overlay-depth-bot": "var(--v2-alpha-light-0)",
++      "v2-overlay-simple-tab-active-scrim": "#24242400",
++      "v2-overlay-simple-tab-hover-scrim": "#3a3a3a00",
++      "v2-overlay-simple-tab-scrim": "#08080800",
++      "v2-state-bg-success": "var(--v2-green-1200)",
++      "v2-state-fg-success": "var(--v2-green-500)",
++      "v2-state-border-success": "var(--v2-green-900)",
++      "v2-state-bg-warning": "var(--v2-yellow-1200)",
++      "v2-state-fg-warning": "var(--v2-yellow-500)",
++      "v2-state-border-warning": "var(--v2-yellow-900)",
++      "v2-state-bg-danger": "var(--v2-red-1200)",
++      "v2-state-fg-danger": "var(--v2-red-500)",
++      "v2-state-border-danger": "var(--v2-red-900)",
++      "v2-state-bg-info": "var(--v2-blue-1200)",
++      "v2-state-fg-info": "var(--v2-blue-500)",
++      "v2-state-border-info": "var(--v2-blue-900)",
++      "v2-agent-plan-solid": "var(--v2-pink-400)",
++      "v2-agent-plan-border": "rgba(247, 153, 198, 0.2)",
++      "v2-agent-plan-background": "rgba(170, 53, 118, 0.05)",
++      "v2-agent-build-solid": "var(--v2-blue-300)",
++      "v2-agent-build-border": "rgba(162, 188, 255, 0.2)",
++      "v2-agent-build-background": "rgba(38, 63, 169, 0.05)",
++      "v2-agent-explore-solid": "var(--v2-yellow-300)",
++      "v2-agent-explore-border": "rgba(243, 218, 155, 0.2)",
++      "v2-agent-explore-background": "rgba(172, 136, 51, 0.05)",
++      "v2-agent-review-solid": "var(--v2-green-300)",
++      "v2-agent-writer-solid": "var(--v2-purple-400)",
++      "v2-avatar-bg-orange": "#723d22ff",
++      "v2-avatar-border-orange": "#ff8648ff",
++      "v2-avatar-bg-yellow": "#68552bff",
++      "v2-avatar-border-yellow": "#e7af36ff",
++      "v2-avatar-bg-cyan": "#005a6eff",
++      "v2-avatar-border-cyan": "#0096b8ff",
++      "v2-avatar-bg-green": "#196130ff",
++      "v2-avatar-border-green": "#49c970ff",
++      "v2-avatar-bg-red": "#7a1f23ff",
++      "v2-avatar-border-red": "#d92e3cff",
++      "v2-avatar-bg-pink": "#8c2d61ff",
++      "v2-avatar-border-pink": "#e4429eff",
++      "v2-avatar-bg-blue": "#263fa9ff",
++      "v2-avatar-border-blue": "#7698fdff",
++      "v2-avatar-bg-purple": "#361f83ff",
++      "v2-avatar-border-purple": "#7152f4ff",
++      "v2-avatar-bg-gray": "#5c5c5cff",
++      "v2-avatar-border-gray": "#aeaeaeff",
++      "v2-elevation-raised": "0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
++      "v2-elevation-floating": "0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 4px 8px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
++      "v2-elevation-overlay": "0px 16px 32px 0px var(--v2-alpha-dark-30), 0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
++      "v2-elevation-input": "0px 1px 2px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
++      "v2-elevation-button-neutral": "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
++      "v2-elevation-button-contrast": "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-40), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0px var(--v2-alpha-light-0), 0px -0.5px 0px 0px var(--v2-alpha-light-30)",
++      "v2-elevation-elements": "0px 0.5px 0.5px 0px var(--v2-alpha-dark-40)",
++      "v2-elevation-switch-off": "inset 0px -0.5px 0px 0px var(--v2-alpha-light-10), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0.5px var(--v2-alpha-light-16)",
++      "v2-elevation-switch-on": "inset 0px -0.5px 0px 0px var(--v2-alpha-light-10), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0.5px var(--v2-alpha-light-16)",
++      "v2-illustration-illustration-layer-01": "var(--v2-grey-900)",
++      "v2-illustration-illustration-layer-02": "var(--v2-grey-800)",
++      "v2-illustration-illustration-layer-03": "var(--v2-grey-700)"
++    }
++  }
++}
+diff --git a/script/panacode-ui-ownership-check.ts b/script/panacode-ui-ownership-check.ts
+new file mode 100644
+index 000000000..0c14697eb
+--- /dev/null
++++ b/script/panacode-ui-ownership-check.ts
+@@ -0,0 +1,48 @@
++#!/usr/bin/env bun
++/**
++ * Static ownership guard for the Panacode UI overlay.
++ * Fails when React demo packages leak into production workspace deps,
++ * or when the Panacode design package / merge guide are missing.
++ */
++import { existsSync, readFileSync } from "node:fs"
++import { join } from "node:path"
++
++const root = join(import.meta.dir, "..")
++const failures: string[] = []
++
++const required = [
++  "packages/panacode-ui/package.json",
++  "packages/panacode-ui/src/index.ts",
++  "packages/panacode-ui/src/primitives/switch.tsx",
++  "packages/panacode-ui/src/styles/shell.css",
++  "packages/ui/src/theme/themes/panacode.json",
++  "panacode-docs/UPSTREAM-MERGE.md",
++]
++
++for (const path of required) {
++  if (!existsSync(join(root, path))) failures.push(`missing required Panacode file: ${path}`)
++}
++
++const appPkg = JSON.parse(readFileSync(join(root, "packages/app/package.json"), "utf8")) as {
++  dependencies?: Record<string, string>
++}
++if (!appPkg.dependencies?.["@panacode/ui"]) failures.push("packages/app must depend on @panacode/ui")
++
++const forbidden = ["react", "react-dom", "@radix-ui/react-switch"]
++for (const name of forbidden) {
++  if (appPkg.dependencies?.[name]) failures.push(`packages/app must not depend on ${name} (use SolidJS Panacode ports)`)
++}
++
++const appEntry = readFileSync(join(root, "packages/app/src/app.tsx"), "utf8")
++if (!appEntry.includes("PANACODE_THEME_ID") || !appEntry.includes("defaultTheme")) {
++  failures.push("packages/app/src/app.tsx must default ThemeProvider to Panacode theme")
++}
++if (!appEntry.includes('dataset.brand = "panacode"') && !appEntry.includes("data-brand")) {
++  failures.push("packages/app/src/app.tsx must mark the document with Panacode brand hooks")
++}
++
++if (failures.length) {
++  console.error("panacode-ui-ownership-check failed:\n - " + failures.join("\n - "))
++  process.exit(1)
++}
++console.log("panacode-ui-ownership-check ok")
+-- 
+2.43.0
+

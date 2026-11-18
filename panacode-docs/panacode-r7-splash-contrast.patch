@@ -1,0 +1,455 @@
+diff --git a/packages/app/public/oc-theme-preload.js b/packages/app/public/oc-theme-preload.js
+index 1c1795d1a7..c08c5de447 100644
+--- a/packages/app/public/oc-theme-preload.js
++++ b/packages/app/public/oc-theme-preload.js
+@@ -1,6 +1,7 @@
+ ;(function () {
+   var key = "opencode-theme-id"
+-  var themeId = localStorage.getItem(key) || "oc-2"
++  // Panacode defaults to its own theme; oc-2 remains available once chosen.
++  var themeId = localStorage.getItem(key) || "panacode"
+ 
+   var scheme = localStorage.getItem("opencode-color-scheme") || "system"
+   var isDark = scheme === "dark" || (scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+@@ -8,7 +9,18 @@
+ 
+   document.documentElement.dataset.theme = themeId
+   document.documentElement.dataset.colorScheme = mode
++  document.documentElement.dataset.brand = "panacode"
+   document.documentElement.style.backgroundColor = isDark ? "#080808" : "#fafafa"
++  document.documentElement.style.colorScheme = mode
++
++  // Seed high-contrast ink/surface before theme CSS arrives so splash + error
++  // logs never render black-on-black or white-on-white on first paint.
++  var seed = document.createElement("style")
++  seed.id = "oc-theme-preload-seed"
++  seed.textContent = isDark
++    ? ":root{color-scheme:dark;--text-strong:#ededed;--text-weak:#707070;--input-base:#1c1c1c;--icon-base:#7e7e7e;--icon-weak-base:#a0a0a0;--icon-strong-base:#ededed;--v2-background-bg-base:#161616;--v2-background-bg-deep:#080808;--v2-text-text-base:#ededed;}"
++    : ":root{color-scheme:light;--text-strong:#171717;--text-weak:#8f8f8f;--input-base:#fcfcfc;--icon-base:#8f8f8f;--icon-weak-base:#c7c7c7;--icon-strong-base:#171717;--v2-background-bg-base:#fafafa;--v2-background-bg-deep:#f2f2f2;--v2-text-text-base:#171717;}"
++  document.head.appendChild(seed)
+ 
+   // Update theme-color meta tag to match app color scheme
+   var metas = document.querySelectorAll("meta[name='theme-color']")
+diff --git a/packages/app/src/shell/errors/error.tsx b/packages/app/src/shell/errors/error.tsx
+index 176b01cbda..3de36f8f26 100644
+--- a/packages/app/src/shell/errors/error.tsx
++++ b/packages/app/src/shell/errors/error.tsx
+@@ -1,6 +1,5 @@
+ import { TextField } from "@opencode/ui/text-field"
+ import type { captureException } from "@sentry/solid"
+-import { Logo } from "@opencode/ui/logo"
+ import { Button } from "@opencode/ui/button"
+ import { Component, createEffect, createSignal, on, onCleanup, onMount, Show, untrack } from "solid-js"
+ import { Predicate } from "effect"
+@@ -405,7 +404,20 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
+       data-tauri-drag-region
+     >
+       <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
+-        <Logo class="w-48 sm:w-58.5 opacity-12 shrink-0" />
++        <p
++          data-component="error-brand"
++          class="text-20-medium tracking-tight shrink-0"
++          style={{
++            "user-select": "text",
++            "-webkit-user-select": "text",
++            cursor: "text",
++            color: "var(--text-strong, #ededed)",
++            margin: "0",
++            "font-size": "28px",
++          }}
++        >
++          Panacode
++        </p>
+         <div class="flex flex-col items-center gap-2 text-center">
+           <h1 class="text-lg font-medium text-text-strong">
+             {language.t(status() ? "error.page.title.status" : "error.page.title")}
+@@ -421,7 +433,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
+           readOnly
+           copyable
+           multiline
+-          class="max-h-96 w-full font-mono text-xs no-scrollbar"
++          class="max-h-96 w-full font-mono text-xs no-scrollbar text-text-strong"
+           label={language.t("error.page.details.label")}
+           hideLabel
+         />
+diff --git a/packages/app/src/theme-preload.test.ts b/packages/app/src/theme-preload.test.ts
+index 871eef48ec..7357b26766 100644
+--- a/packages/app/src/theme-preload.test.ts
++++ b/packages/app/src/theme-preload.test.ts
+@@ -14,28 +14,32 @@ beforeEach(() => {
+   document.head.innerHTML = ""
+   document.documentElement.removeAttribute("data-theme")
+   document.documentElement.removeAttribute("data-color-scheme")
++  document.documentElement.removeAttribute("data-brand")
+   document.documentElement.style.removeProperty("background-color")
++  document.documentElement.style.removeProperty("color-scheme")
+   localStorage.clear()
+   setSystemDark(false)
+ })
+ 
+ describe("theme preload", () => {
+   test.each([
+-    { stored: undefined, systemDark: false, scheme: "light", background: "#fafafa" },
+-    { stored: "dark", systemDark: false, scheme: "dark", background: "#080808" },
+-    { stored: "light", systemDark: true, scheme: "light", background: "#fafafa" },
+-    { stored: "system", systemDark: true, scheme: "dark", background: "#080808" },
++    { stored: undefined, systemDark: false, scheme: "light", background: "#fafafa", ink: "#171717" },
++    { stored: "dark", systemDark: false, scheme: "dark", background: "#080808", ink: "#ededed" },
++    { stored: "light", systemDark: true, scheme: "light", background: "#fafafa", ink: "#171717" },
++    { stored: "system", systemDark: true, scheme: "dark", background: "#080808", ink: "#ededed" },
+   ])(
+     "paints the default theme in $scheme for stored scheme $stored (system dark: $systemDark)",
+-    ({ stored, systemDark, scheme, background }) => {
++    ({ stored, systemDark, scheme, background, ink }) => {
+       setSystemDark(systemDark)
+ 
+       if (stored) localStorage.setItem("opencode-color-scheme", stored)
+       run()
+ 
+-      expect(document.documentElement.dataset.theme).toBe("oc-2")
++      expect(document.documentElement.dataset.theme).toBe("panacode")
++      expect(document.documentElement.dataset.brand).toBe("panacode")
+       expect(document.documentElement.dataset.colorScheme).toBe(scheme)
+       expect(document.documentElement.style.backgroundColor).toBe(background)
++      expect(document.getElementById("oc-theme-preload-seed")?.textContent).toContain(`--text-strong:${ink}`)
+     },
+   )
+ 
+diff --git a/packages/client/src/promise/service.ts b/packages/client/src/promise/service.ts
+index 72749171e1..8d00bf78b7 100644
+--- a/packages/client/src/promise/service.ts
++++ b/packages/client/src/promise/service.ts
+@@ -1,7 +1,8 @@
+ import { readFile, rm } from "node:fs/promises"
+ import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
+ import { contenderPool, spawnServiceContender } from "../service-contender.js"
+-import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
++import { defaultEnsureTiming, ensureTiming, withEnsureTiming, type EnsureTiming } from "../service-timing.js"
++export { withEnsureTiming }
+ import { matchesVersion } from "../service-version.js"
+ import { PtyHandoff } from "../pty-handoff.js"
+ import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+diff --git a/packages/desktop/src/main/service/background-service.ts b/packages/desktop/src/main/service/background-service.ts
+index 7bf76da471..52d4c155af 100644
+--- a/packages/desktop/src/main/service/background-service.ts
++++ b/packages/desktop/src/main/service/background-service.ts
+@@ -11,6 +11,8 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
+ import { DesktopCli } from "./desktop-cli"
+ import { SidecarCredentials } from "./sidecar-credentials"
+ import { takeSidecarProbe } from "./sidecar-probe"
++import { withEnsureTiming } from "@opencode/client/service"
++import { cliServiceRegistrationFile } from "./cli-service-file"
+ 
+ export * as BackgroundService from "./background-service"
+ 
+@@ -57,9 +59,14 @@ const probe = Effect.fn("BackgroundService.probe")(function* () {
+ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: BackgroundServiceMachine.ConnectMode) {
+   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
+   const setup = yield* prepare(mode)
+-
+-  const run = (version = setup.version) =>
+-    setup.client.Service.ensure({
++  // Windows antivirus + Hyper-V excluded ports often make the first boot exceed the client's 2s
++  // health probe; the ensure loop then kills a still-starting server. Use a safer port, longer
++  // probes, and skip the models.dev fetch so packaged Windows reaches /api/info ready in time.
++  const windowsPackaged = app.isPackaged && process.platform === "win32"
++  const servicePort = setup.isolated ? 0x0c0c : windowsPackaged ? 0x70de : undefined
++
++  const run = (version = setup.version) => {
++    const options = {
+       file: setup.file,
+       version,
+       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
+@@ -68,11 +75,31 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
+         ...setup.cli.command,
+         "serve",
+         "--service",
+-        ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
++        ...(setup.isolated || windowsPackaged ? ["--hostname", "127.0.0.1"] : []),
++        ...(servicePort !== undefined ? ["--port", String(servicePort)] : []),
+       ],
+-      onStart: (reason, previousVersion) =>
++      env: windowsPackaged
++        ? {
++            OPENCODE_DISABLE_MODELS_FETCH: "1",
++            PANACODE_DISABLE_MODELS_FETCH: "1",
++            OPENCODE_DISABLE_FILEWATCHER: "1",
++            PANACODE_DISABLE_FILEWATCHER: "1",
++          }
++        : undefined,
++      onStart: (reason: "missing" | "version-mismatch", previousVersion?: string) =>
+         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
+-    })
++    }
++    return setup.client.Service.ensure(
++      windowsPackaged
++        ? withEnsureTiming(options, {
++            requestTimeout: 15_000,
++            promiseTimeout: 240_000,
++            spawnDelay: 15_000,
++            maxSpawnDelay: 60_000,
++          })
++        : options,
++    )
++  }
+ 
+   const service = yield* Effect.tryPromise(() =>
+     run().catch((error) => {
+@@ -112,10 +139,17 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
+     process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+       ? path.join(
+           process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+-          "opencode",
++          "panacode",
+           "service-local.json",
+         )
+-      : undefined
++      : cliServiceRegistrationFile({
++          join: path.join,
++          home: app.getPath("home"),
++          cliVersion: cli.version,
++          stateHome: process.env.XDG_STATE_HOME,
++        })
++
++  yield* Effect.logInfo("v2 CLI service registration file", { file, cliVersion: cli.version })
+ 
+   return { cli, client, file, isolated, version }
+ })
+diff --git a/packages/desktop/src/main/service/sidecar-probe.ts b/packages/desktop/src/main/service/sidecar-probe.ts
+index 5f1ceedbc5..32d1aadcfb 100644
+--- a/packages/desktop/src/main/service/sidecar-probe.ts
++++ b/packages/desktop/src/main/service/sidecar-probe.ts
+@@ -3,6 +3,7 @@ import path from "node:path"
+ import { app } from "electron"
+ import type { Endpoint } from "@opencode/client/service"
+ import { CHANNEL } from "../constants"
++import { cliServiceRegistrationFile } from "./cli-service-file"
+ 
+ // The main thread idles between showing the first window and evaluating the main bundle, waiting
+ // for the renderer's asset requests. That slot is long enough to find out whether a compatible
+@@ -16,7 +17,14 @@ export function startSidecarProbe() {
+   const version = CHANNEL === "beta" ? undefined : bundledVersion()
+ 
+   if (version === "") return
+-  probe = import("@opencode/client/service").then(({ Service }) => Service.discover({ version })).catch(() => undefined)
++  const file = cliServiceRegistrationFile({
++    join: path.join,
++    home: app.getPath("home"),
++    cliVersion: version ?? "",
++  })
++  probe = import("@opencode/client/service")
++    .then(({ Service }) => Service.discover({ version, file }))
++    .catch(() => undefined)
+ }
+ 
+ /** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */
+@@ -28,9 +36,11 @@ export function takeSidecarProbe() {
+ }
+ 
+ function bundledVersion() {
+-  try {
+-    return readFileSync(path.join(process.resourcesPath, "opencode-cli.version"), "utf8").trim()
+-  } catch {
+-    return ""
++  for (const name of ["panacode-cli.version", "opencode-cli.version"]) {
++    try {
++      const value = readFileSync(path.join(process.resourcesPath, name), "utf8").trim()
++      if (value) return value
++    } catch {}
+   }
++  return ""
+ }
+diff --git a/packages/desktop/src/renderer/startup/splash.tsx b/packages/desktop/src/renderer/startup/splash.tsx
+index f284d3d8f3..6804d51a79 100644
+--- a/packages/desktop/src/renderer/startup/splash.tsx
++++ b/packages/desktop/src/renderer/startup/splash.tsx
+@@ -2,6 +2,28 @@ import type { Platform } from "@opencode/app/desktop"
+ import { onMount, Show } from "solid-js"
+ import "./splash.css"
+ 
++function BrandMark(props: { large?: boolean }) {
++  return (
++    <p
++      data-slot="startup-brand"
++      classList={{
++        "text-20-medium tracking-tight": true,
++        "opacity-90": !!props.large,
++      }}
++      style={{
++        "font-size": props.large ? "32px" : undefined,
++        "user-select": "text",
++        "-webkit-user-select": "text",
++        cursor: "text",
++        color: "var(--text-strong, #ededed)",
++        margin: "0",
++      }}
++    >
++      Panacode
++    </p>
++  )
++}
++
+ export function LoadingSplash(props: {
+   deep: boolean
+   firstLaunch: boolean
+@@ -27,20 +49,23 @@ export function LoadingSplash(props: {
+             "bg-v2-background-bg-deep": props.deep,
+             "bg-v2-background-bg-base": !props.deep,
+           }}
++          style={{
++            "background-color": props.deep
++              ? "var(--v2-background-bg-deep, #080808)"
++              : "var(--v2-background-bg-base, #161616)",
++          }}
+         >
+-          <div class="text-20-medium text-v2-text-text-strong tracking-tight">Panacode</div>
++          <BrandMark />
+         </div>
+       }
+     >
+       <div
+         data-component="first-launch-splash"
+         data-drawing="running"
+-        aria-hidden="true"
+         class="h-dvh w-screen flex flex-col items-center justify-center bg-v2-background-bg-base"
++        style={{ "background-color": "var(--v2-background-bg-base, #161616)" }}
+       >
+-        <div class="text-20-medium text-v2-text-text-strong tracking-tight opacity-80" style={{ "font-size": "32px" }}>
+-          Panacode
+-        </div>
++        <BrandMark large />
+       </div>
+     </Show>
+   )
+diff --git a/packages/ui/src/components/text-field.css b/packages/ui/src/components/text-field.css
+index 922c0ccb5a..f4fb71a461 100644
+--- a/packages/ui/src/components/text-field.css
++++ b/packages/ui/src/components/text-field.css
+@@ -49,7 +49,11 @@
+ 
+       border-radius: var(--radius-md);
+       border: 1px solid var(--v2-border-border-base);
++      /* Keep surface + ink in sync; Electron/Windows otherwise paints a UA-white
++         textarea over a themed wrapper (white-on-white error logs). */
+       background: var(--input-base);
++      color: var(--text-strong);
++      color-scheme: inherit;
+ 
+       &:focus-within:not(:has([data-readonly])) {
+         border-color: transparent;
+@@ -73,7 +77,8 @@
+     }
+ 
+     [data-slot="input-input"] {
+-      color: var(--text-strong);
++      color: inherit;
++      -webkit-text-fill-color: currentColor;
+ 
+       display: flex;
+       height: 32px;
+@@ -82,8 +87,11 @@
+       flex: 1;
+       min-width: 0;
+ 
+-      background: transparent;
++      appearance: none;
++      -webkit-appearance: none;
++      background-color: transparent !important;
+       border: none;
++      color-scheme: inherit;
+ 
+       /* text-14-regular */
+       font-family: var(--font-family-sans);
+@@ -99,6 +107,7 @@
+ 
+       &::placeholder {
+         color: var(--text-weak);
++        -webkit-text-fill-color: var(--text-weak);
+       }
+     }
+ 
+@@ -107,6 +116,10 @@
+       min-height: 32px;
+       padding: 6px 12px;
+       resize: none;
++      /* Chromium on Windows fills textareas white unless the control itself is themed. */
++      background-color: transparent !important;
++      color: inherit;
++      -webkit-text-fill-color: currentColor;
+     }
+ 
+     [data-slot="input-copy-button"] {
+diff --git a/packages/desktop/src/main/service/cli-service-file.test.ts b/packages/desktop/src/main/service/cli-service-file.test.ts
+new file mode 100644
+index 0000000000..6ae3617db5
+--- /dev/null
++++ b/packages/desktop/src/main/service/cli-service-file.test.ts
+@@ -0,0 +1,32 @@
++import { expect, test } from "bun:test"
++import path from "node:path"
++import { cliServiceRegistrationFile } from "./cli-service-file"
++
++test.each([
++  {
++    version: "2.3.0",
++    expected: path.join("/home/ali", ".local", "state", "panacode", "service.json"),
++  },
++  {
++    version: "0.0.0-latest-202611150802",
++    expected: path.join("/home/ali", ".local", "state", "panacode", "service.json"),
++  },
++  {
++    version: "0.0.0-cursor-panacode-install-isolate-58f9-202611150802",
++    expected: path.join(
++      "/home/ali",
++      ".local",
++      "state",
++      "panacode",
++      "service-cursor-panacode-install-isolate-58f9.json",
++    ),
++  },
++])("cliServiceRegistrationFile for $version", ({ version, expected }) => {
++  expect(
++    cliServiceRegistrationFile({
++      join: path.join,
++      home: "/home/ali",
++      cliVersion: version,
++    }),
++  ).toBe(expected)
++})
+diff --git a/packages/desktop/src/main/service/cli-service-file.ts b/packages/desktop/src/main/service/cli-service-file.ts
+new file mode 100644
+index 0000000000..9be9fe16c0
+--- /dev/null
++++ b/packages/desktop/src/main/service/cli-service-file.ts
+@@ -0,0 +1,30 @@
++/**
++ * Registration file the packaged CLI writes for `serve --service`.
++ * Must stay in sync with `packages/cli/src/services/service-config.ts` `filename()`.
++ *
++ * Preview / agent builds bake `OPENCODE_CHANNEL` into the binary as a non-release
++ * name (e.g. `cursor-panacode-install-isolate-58f9`), which uses
++ * `service-<channel>.json` instead of `service.json`. Desktop ensure/discover
++ * must open that same path or it times out waiting forever.
++ */
++export function cliServiceRegistrationFile(input: {
++  readonly join: (...parts: string[]) => string
++  readonly home: string
++  readonly cliVersion: string
++  readonly stateHome?: string
++  readonly productSlug?: string
++}) {
++  const state = input.stateHome ?? input.join(input.home, ".local", "state")
++  const dir = input.join(state, input.productSlug ?? "panacode")
++  const channel = previewChannel(input.cliVersion)
++  if (!channel || channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") {
++    return input.join(dir, "service.json")
++  }
++  return input.join(dir, `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`)
++}
++
++function previewChannel(version: string) {
++  // Script.version for preview builds: 0.0.0-<channel>-<YYYYMMDDHHmm[ss]>
++  const match = /^0\.0\.0-(.+)-(\d{12,14})$/.exec(version)
++  return match?.[1]
++}
