@@ -74,4 +74,4 @@ Merged on master: `/connect/panacode` + `POST /api/v1/connect/panacode/*` (sessi
 1. Confirm live balance/meter on the reseller account and keep admin rates (`creditsPerUsd` / `upstreamTokensPerUsd`) aligned with invoices.
 2. Real SMS login, bank destination, and staff accounts (see `docs/PRODUCTION.md`).
 3. Optional: streaming proxy, deeper crash reconciliation against `GET /v1/keys/logs`, and operator retry queue when a remote CVC edit fails.
-4. Ship installable **Panacode** builds (CLI/desktop) with path isolation from OpenCode + Sign in with PanaAI against production.
+4. ~~Ship installable **Panacode** builds (CLI/desktop) with path isolation from OpenCode + Sign in with PanaAI against production.~~ CLI + Windows desktop NSIS (`ai.panacode.desktop`) are buildable; see `docs/panacode/INSTALL.md`. Still open: signed release hosting / auto-update feed.
