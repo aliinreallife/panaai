@@ -1,7 +1,7 @@
 From 013e9c250b2f68aa8d707d9d4145193b0452b360 Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Wed, 18 Nov 2026 06:55:00 +0000
-Subject: [PATCH 1/4] feat(panacode-ui): add SolidJS design system and Panacode
+Subject: [PATCH 1/5] feat(panacode-ui): add SolidJS design system and Panacode
  theme
 
 Introduce @panacode/ui with Arc tokens, canonical Switch, shared

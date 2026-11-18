@@ -1,7 +1,7 @@
 From 0da99e450e94f4dc6d7e696152a3566b8eed4208 Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Wed, 18 Nov 2026 06:55:00 +0000
-Subject: [PATCH 2/4] feat(app): wire Panacode theme, MCP panel, and approvals
+Subject: [PATCH 2/5] feat(app): wire Panacode theme, MCP panel, and approvals
  adapter
 
 Default ThemeProvider to panacode, mark data-brand, replace Extensions

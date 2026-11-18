@@ -1,7 +1,7 @@
 From 0e555403e0db51a58b303478c6235679e5dd8aa2 Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Wed, 18 Nov 2026 06:55:05 +0000
-Subject: [PATCH 4/4] docs(panacode): record redesign tip SHA in UPSTREAM-MERGE
+Subject: [PATCH 4/5] docs(panacode): record redesign tip SHA in UPSTREAM-MERGE
 
 ---
  panacode-docs/UPSTREAM-MERGE.md | 1 +

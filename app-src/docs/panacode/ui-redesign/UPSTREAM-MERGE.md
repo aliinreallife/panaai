@@ -132,6 +132,7 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/app/src/index.css` | Shared integration boundary | Imports `@panacode/ui/styles` | Medium | Keep `@import "@panacode/ui/styles"` |
 | `packages/app/src/app.tsx` | Shared integration boundary | Default theme, brand mark, title | High | Re-apply Panacode ThemeProvider/Title/brand hooks after upstream app shell changes |
 | `packages/app/src/settings/providers/extensions.tsx` | Shared integration boundary | MCP tab uses `PanacodeMcpPanel` | High | Prefer Panacode panel; port any new upstream MCP row features into the adapter |
+| `packages/app/src/settings/workspaces/project-extensions.tsx` | Shared integration boundary | Project MCP tab uses `PanacodeMcpPanel` | High | Keep Panacode panel; preserve plugins/skills/lsps tabs from upstream |
 | `packages/app/src/settings/panacode-mcp-panel.tsx` | Panacode-owned | MCP presentation adapter | Low | Keep ours |
 | `packages/app/src/session/panacode-permission-adapter.tsx` | Panacode-owned | Approvals presentation adapter | Low | Keep ours |
 | `packages/app/src/session/composer/session-composer-region.tsx` | Shared integration boundary | Permission dock → Panacode adapter | High | Preserve adapter wiring; merge new docks/features carefully |

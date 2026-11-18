@@ -817,6 +817,224 @@ index 56533f7f0..37f1bb964 100644
            </Tabs.Content>
  
            <Tabs.Content value="plugins">
+diff --git a/packages/app/src/settings/workspaces/project-extensions.tsx b/packages/app/src/settings/workspaces/project-extensions.tsx
+index fa7449671..cad882002 100644
+--- a/packages/app/src/settings/workspaces/project-extensions.tsx
++++ b/packages/app/src/settings/workspaces/project-extensions.tsx
+@@ -1,33 +1,19 @@
+-import { Button } from "@opencode/ui/button"
+ import { Icon } from "@opencode/ui/icon"
+-import { Switch } from "@opencode/ui/switch"
+ import { Tabs } from "@opencode/ui/tabs"
+ import { isLocationNotFoundError } from "@opencode/client/promise"
+-import {
+-  type Component,
+-  For,
+-  Show,
+-  createEffect,
+-  createMemo,
+-  createSignal,
+-  onCleanup,
+-  type JSX,
+-  untrack,
+-} from "solid-js"
++import { type Component, For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
+ import { useLanguage } from "@/runtime/i18n/language"
+-import { useMcpController } from "@/providers/connect/mcp"
+-import { mcpRowView } from "@/providers/connect/mcp-machine"
+ import { useWorkspaceLocation } from "@/workspaces/location"
+ import { useServerSDK } from "@/runtime/server/client"
+ import { useData } from "@/runtime/server/current"
+ import { pluginLabels } from "@/providers/catalog/plugin"
+ import { ExternalLink } from "@/runtime/platform/external-link"
+-import { usePlatform } from "@/runtime/platform/platform"
+ import { ConsoleName, ConsoleReplaced, createConsoleSources } from "@/settings/providers/console-link"
+ import { ProjectFolderMissing } from "./project-folder-missing"
+ import { configuredLanguageServers } from "./project-lsp"
+ import { SettingsList } from "@/settings/list"
+ import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
++import { PanacodeMcpPanel } from "@/settings/panacode-mcp-panel"
+ import "@/shell/search-list.css"
+ import "./project.css"
+ 
+@@ -43,13 +29,6 @@ const ExtensionCard: Component<{ children: JSX.Element }> = (props) => (
+   <SettingsList variant="catalog">{props.children}</SettingsList>
+ )
+ 
+-const statusLabels = {
+-  connected: "mcp.status.connected",
+-  failed: "mcp.status.failed",
+-  needs_auth: "mcp.status.needs_auth",
+-  disabled: "mcp.status.disabled",
+-} as const
+-
+ const ExtensionRow: Component<{
+   icon?: "cube" | "post-skill" | "code"
+   /** An MCP server's status, shown as a dot in the icon's place, as on the server-wide page. */
+@@ -257,48 +236,14 @@ export const ProjectSettingsExtensions: Component<{
+   const serverSDK = useServerSDK()
+   const directorySDK = useWorkspaceLocation()
+   const data = useData()
+-  const mcp = useMcpController(() => directorySDK().directory)
+-
+-  const platform = usePlatform()
+-
+   const sources = createConsoleSources(() => directorySDK().directory)
+ 
+   createEffect(() => {
+     if (serverSDK.connection.status() !== "connected") return
+     const ref = { directory: directorySDK().directory }
+-    void Promise.all([
+-      data.location.mcp.server.sync(),
+-      data.location.skill.sync(),
+-      data.location.mcp.server.sync(ref),
+-      data.location.skill.sync(ref),
+-    ]).catch(() => undefined)
+-  })
+-
+-  const globalMcpNames = createMemo(() =>
+-    [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.name))].sort(),
+-  )
+-
+-  const projectMcpNames = createMemo(() => {
+-    const shared = new Set(globalMcpNames())
+-
+-    return (data.location.mcp.server.list({ directory: directorySDK().directory }) ?? [])
+-      .map((server) => server.name)
+-      .filter((name) => !shared.has(name))
+-      .sort()
++    void Promise.all([data.location.skill.sync(), data.location.skill.sync(ref)]).catch(() => undefined)
+   })
+ 
+-  const mcpServer = (name: string) =>
+-    data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)
+-
+-  const mcpStatus = (name: string) => mcpServer(name)?.status.status
+-
+-  // A server that needs a sign-in it can start asks for it in the switch's place, as on the server-wide page.
+-  const needsSignIn = (name: string) => {
+-    const server = mcpServer(name)
+-
+-    return server?.status.status === "needs_auth" && !!server.integrationID
+-  }
+-
+   // Both lists load as one, so a project list that answers first never shows shared plugins as the project's own. A
+   // deleted project folder has no plugins of its own; `ProjectFolderMissing` explains why.
+   const plugins = createExtensionLoad({
+@@ -347,80 +292,6 @@ export const ProjectSettingsExtensions: Component<{
+     )
+   })
+ 
+-  // A Console server whose account isn't connected answers but can't run its tools, so its dot asks for the connection.
+-  const mcpDot = (name: string) => {
+-    const status = mcpStatus(name) ?? "pending"
+-
+-    return sources.managed(name)?.needsConnection && status === "connected" ? "needs_auth" : status
+-  }
+-
+-  // The dot shows the status, as in the MCPs dialog; the words stay for assistive technology.
+-  const mcpLabel = (name: string) => {
+-    const status = mcpStatus(name)
+-
+-    return status && status !== "pending" ? language.t(statusLabels[status]) : undefined
+-  }
+-
+-  const mcpRows = (items: string[]) => (
+-    <For each={items}>
+-      {(name) => (
+-        <ExtensionRow
+-          status={mcpDot(name)}
+-          name={name}
+-          console={sources.managed(name) && sources.links(name)?.manage}
+-          replaces={sources.mcp(name)?.overridden ? sources.links(name)?.manage : undefined}
+-        >
+-          <Show
+-            when={sources.connect(name)}
+-            fallback={
+-              <Show
+-                when={needsSignIn(name)}
+-                fallback={
+-                  <Switch
+-                    checked={mcpStatus(name) === "connected"}
+-                    disabled={mcpRowView(mcp.state(), name, undefined).busy}
+-                    description={mcpLabel(name)}
+-                    class="[&_[data-slot=switch-description]]:sr-only"
+-                    hideLabel
+-                    onChange={(enabled) =>
+-                      mcp.dispatch({ type: "toggle.requested", name, enabled, status: untrack(() => mcpStatus(name)) })
+-                    }
+-                  >
+-                    {name}
+-                  </Switch>
+-                }
+-              >
+-                <Button
+-                  size="small"
+-                  variant="ghost-muted"
+-                  disabled={mcpRowView(mcp.state(), name, "needs_auth").busy}
+-                  aria-busy={mcpRowView(mcp.state(), name, "needs_auth").busy}
+-                  aria-label={language.t("dialog.mcp.signIn.open", { name })}
+-                  onClick={() => mcp.dispatch({ type: "toggle.requested", name, enabled: true, status: "needs_auth" })}
+-                >
+-                  {language.t(
+-                    mcpRowView(mcp.state(), name, "needs_auth").busy ? "dialog.mcp.signingIn" : "dialog.mcp.signIn",
+-                  )}
+-                </Button>
+-              </Show>
+-            }
+-          >
+-            {(href) => (
+-              <Button
+-                size="small"
+-                variant="ghost-muted"
+-                aria-label={language.t("settings.extensions.console.connect", { name })}
+-                onClick={() => platform.openExternal(href())}
+-              >
+-                {language.t("common.connect")}
+-              </Button>
+-            )}
+-          </Show>
+-        </ExtensionRow>
+-      )}
+-    </For>
+-  )
+-
+   const pluginRows = (items: string[]) => <For each={items}>{(name) => <ExtensionRow icon="cube" name={name} />}</For>
+ 
+   const skillRows = (items: SkillItem[]) => (
+@@ -460,24 +331,15 @@ export const ProjectSettingsExtensions: Component<{
+           </Tabs.List>
+ 
+           <Tabs.Content value="mcps">
+-            <div class="project-settings-extension-section">
+-              <ProjectSectionHeader
+-                kind="mcps"
+-                empty={projectMcpNames().length === 0}
+-                action={<span>{language.t("settings.extensions.manageConfig")}</span>}
++            {/* Panacode presentation — MCP controllers remain OpenCode; project directory scopes the list. */}
++            <PanacodeMcpPanel directory={directorySDK().directory} />
++            <Show when={sources.view().status === "error"}>
++              <ExtensionLoadFailed
++                message={language.t("settings.extensions.sources.loadFailed")}
++                retry={language.t("common.retry")}
++                onRetry={sources.retry}
+               />
+-              <Show when={projectMcpNames().length > 0}>
+-                <ExtensionCard>{mcpRows(projectMcpNames())}</ExtensionCard>
+-              </Show>
+-              <SharedSection count={globalMcpNames().length}>{mcpRows(globalMcpNames())}</SharedSection>
+-              <Show when={sources.view().status === "error"}>
+-                <ExtensionLoadFailed
+-                  message={language.t("settings.extensions.sources.loadFailed")}
+-                  retry={language.t("common.retry")}
+-                  onRetry={sources.retry}
+-                />
+-              </Show>
+-            </div>
++            </Show>
+           </Tabs.Content>
+ 
+           <Tabs.Content value="plugins">
 diff --git a/packages/panacode-ui/README.md b/packages/panacode-ui/README.md
 new file mode 100644
 index 000000000..e89c93ff9
@@ -3637,10 +3855,10 @@ index 000000000..9033c9764
 +}
 diff --git a/panacode-docs/UPSTREAM-MERGE.md b/panacode-docs/UPSTREAM-MERGE.md
 new file mode 100644
-index 000000000..4d7da17ba
+index 000000000..8b5f12b84
 --- /dev/null
 +++ b/panacode-docs/UPSTREAM-MERGE.md
-@@ -0,0 +1,366 @@
+@@ -0,0 +1,367 @@
 +# Panacode ← OpenCode upstream merge guide
 +
 +This document is the authoritative guide for merging newer OpenCode versions into the Panacode fork without destroying the Panacode design system.
@@ -3775,6 +3993,7 @@ index 000000000..4d7da17ba
 +| `packages/app/src/index.css` | Shared integration boundary | Imports `@panacode/ui/styles` | Medium | Keep `@import "@panacode/ui/styles"` |
 +| `packages/app/src/app.tsx` | Shared integration boundary | Default theme, brand mark, title | High | Re-apply Panacode ThemeProvider/Title/brand hooks after upstream app shell changes |
 +| `packages/app/src/settings/providers/extensions.tsx` | Shared integration boundary | MCP tab uses `PanacodeMcpPanel` | High | Prefer Panacode panel; port any new upstream MCP row features into the adapter |
++| `packages/app/src/settings/workspaces/project-extensions.tsx` | Shared integration boundary | Project MCP tab uses `PanacodeMcpPanel` | High | Keep Panacode panel; preserve plugins/skills/lsps tabs from upstream |
 +| `packages/app/src/settings/panacode-mcp-panel.tsx` | Panacode-owned | MCP presentation adapter | Low | Keep ours |
 +| `packages/app/src/session/panacode-permission-adapter.tsx` | Panacode-owned | Approvals presentation adapter | Low | Keep ours |
 +| `packages/app/src/session/composer/session-composer-region.tsx` | Shared integration boundary | Permission dock → Panacode adapter | High | Preserve adapter wiring; merge new docks/features carefully |

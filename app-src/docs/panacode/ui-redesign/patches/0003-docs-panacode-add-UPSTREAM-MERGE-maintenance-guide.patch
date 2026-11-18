@@ -1,7 +1,7 @@
 From 05fa01cca99b78e9befaffb31ee511477123ba6a Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Wed, 18 Nov 2026 06:55:00 +0000
-Subject: [PATCH 3/4] docs(panacode): add UPSTREAM-MERGE maintenance guide
+Subject: [PATCH 3/5] docs(panacode): add UPSTREAM-MERGE maintenance guide
 
 Document remotes, baseline SHAs, ownership matrix, component map,
 merge procedure, conflict playbook, and AI agent instructions.
