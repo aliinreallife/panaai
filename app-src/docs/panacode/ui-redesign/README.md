@@ -13,7 +13,7 @@ Local implementation also remains on the agent VM at `/workspace/panacode` on br
 | Path | Purpose |
 |---|---|
 | `UPSTREAM-MERGE.md` | Mandatory upstream maintenance guide (copy to `panacode-docs/UPSTREAM-MERGE.md`) |
-| `patches/0001-*.patch` … `0004-*.patch` | Ordered `git format-patch` series from baseline `5c198b87a…` |
+| `patches/0001-*.patch` … `0005-*.patch` | Ordered `git format-patch` series from baseline `5c198b87a…` |
 | `panacode-ui-redesign.diff` | Combined diff (same range) for review |
 
 ## Apply on the Panacode fork
