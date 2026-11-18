@@ -4,6 +4,10 @@ Panacode is a product fork of [OpenCode](https://github.com/anomalyco/opencode) 
 
 **Installing Panacode never overwrites OpenCode.** Paths, env vars, and the CLI binary are isolated (see below).
 
+## UI redesign (SolidJS `@panacode/ui`)
+
+Applyable patch series + upstream merge guide: [`ui-redesign/`](./ui-redesign/). Authoritative merge instructions live in [`ui-redesign/UPSTREAM-MERGE.md`](./ui-redesign/UPSTREAM-MERGE.md).
+
 ## Product defaults
 
 | Setting | Value | Where |
