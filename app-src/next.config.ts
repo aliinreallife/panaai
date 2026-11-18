@@ -7,6 +7,10 @@ const dev = process.env.NODE_ENV !== "production";
  * Content-Security-Policy. Everything (fonts, images, API) is same-origin. Next.js App Router
  * streams its payload through inline scripts, so script-src needs 'unsafe-inline' unless the app
  * moves to per-request nonces. The sandbox may be embedded by a preview host; live mode cannot be framed.
+ *
+ * Do not set `upgrade-insecure-requests`: Panacode connect finishes by navigating to
+ * `http://127.0.0.1:<port>/callback`, and that directive would rewrite it to https and break return-to-app.
+ * Site HTTPS is already enforced via HSTS below.
  */
 const csp = [
   "default-src 'self'",
@@ -21,7 +25,6 @@ const csp = [
   "manifest-src 'self'",
   "worker-src 'self' blob:",
   live ? "frame-ancestors 'none'" : "",
-  dev ? "" : "upgrade-insecure-requests",
 ].filter(Boolean).join("; ");
 
 const nextConfig: NextConfig = {

@@ -311,6 +311,7 @@ export async function exchangeConnectCode(input: { code: string; state: string }
     });
   }
 
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "");
   return {
     secret,
     keyId: session.keyId,
@@ -318,7 +319,8 @@ export async function exchangeConnectCode(input: { code: string; state: string }
     name: session.keyName,
     budget: session.budget,
     rateLimit: session.rateLimit,
-    baseURL: "/v1",
+    // Prefer absolute API origin; the API handler also rewrites using the request origin.
+    baseURL: site ? `${site}/v1` : "/v1",
   };
 }
 

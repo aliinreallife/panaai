@@ -59,6 +59,8 @@ Connect URL (hosted demo): https://panaai-psi.vercel.app/connect/panacode
 
 ### Self-hosted PanaAI (no Vercel)
 
-Run the Next.js app from `app-src` on any Node VPS — see **`docs/DEPLOY.md` §3** (Postgres, systemd, Caddy/nginx, cron).
+Run the Next.js app from `app-src` on any Node VPS with its **own local Postgres** (`docker compose up -d db`) — see **`docs/DEPLOY.md` §3**.
 
-To use that server from Panacode without rebuilding the desktop app: create a `pana-…` API key on your site and set the panaai provider `baseURL` to `https://your-domain/v1` (plus the key). Browser “Sign in with PanaAI” still opens the baked-in auth host until you rebuild Panacode with your `authURL` / `baseURL` in `packages/core/src/panacode/product.ts`.
+After you confirm the API key on `/connect/panacode`, the browser navigates to `http://127.0.0.1:<port>/callback` so Panacode finishes the exchange and comes to the front. Keep Panacode open while you authorize.
+
+To point a stock desktop build at your server without rebuilding: set panaai provider `baseURL` to `https://your-domain/v1` and paste a `pana-…` key. Browser “Sign in with PanaAI” still uses the baked-in auth host until you rebuild Panacode with your `authURL` / `baseURL`.

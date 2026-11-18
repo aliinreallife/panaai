@@ -1,0 +1,26 @@
+# Local Postgres for self-host / development (no Neon, no Vercel).
+# Usage:
+#   docker compose up -d db
+#   cp .env.example .env   # DATABASE_URL already points at this service
+#   npm run db:push && npm run dev
+services:
+  db:
+    image: postgres:16
+    container_name: panaai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - panaai_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  panaai_pg_data:
